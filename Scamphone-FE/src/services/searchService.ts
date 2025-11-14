@@ -29,13 +29,18 @@ export interface SearchResult {
   total: number;
   page: number;
   totalPages: number;
+  suggestions?: {
+    accessories?: any[];
+    similarPrice?: any[];
+    hotDeals?: any[];
+  };
 }
 
 export const searchService = {
   // Tìm kiếm sản phẩm với filter
   searchProducts: async (
     query: string,
-    filters: SearchFilters
+    filters: SearchFilters = {}
   ): Promise<SearchResult> => {
     const response = await api.get('/products/search', {
       params: {
@@ -47,7 +52,7 @@ export const searchService = {
         brand: filters.brand?.join(',')
       }
     });
-    return response.data;
+    return response.data as SearchResult;
   },
 
   // Lấy danh sách thương hiệu

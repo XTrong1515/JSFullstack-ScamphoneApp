@@ -12,6 +12,35 @@ const buildSearchRegex = (rawQuery = '') => {
   return new RegExp(pattern, 'i');
 };
 
+// Remove Vietnamese diacritics for insensitive matching
+const removeDiacritics = (str = '') => {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
+};
+
+// Basic Levenshtein distance for typo tolerance
+const levenshtein = (a = '', b = '') => {
+  a = a.toLowerCase();
+  b = b.toLowerCase();
+  const matrix = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1, // deletion
+        matrix[i][j - 1] + 1, // insertion
+        matrix[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  return matrix[a.length][b.length];
+};
+
 // @desc    Fetch all products with filters, pagination, search
 // @route   GET /api/v1/products
 // @access  Public
@@ -336,20 +365,93 @@ const searchProducts = asyncHandler(async (req, res) => {
 
   const sortOption = sortMap[sortBy] || { createdAt: -1 };
 
-  const [products, total] = await Promise.all([
+  let [products, total] = await Promise.all([
     Product.find(query)
       .populate('category', 'name')
-      .sort(sortOption)
       .skip(skip)
-      .limit(Number(limit)),
+      .limit(Number(limit * 2)), // fetch a bit more for scoring before final slice
     Product.countDocuments(query)
   ]);
 
+  const normalizedQuery = removeDiacritics(String(q).toLowerCase());
+  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+
+  const scored = products.map(p => {
+    const name = p.name || '';
+    const brandVal = p.brand || '';
+    const description = p.description || '';
+    const nameNorm = removeDiacritics(name.toLowerCase());
+    const brandNorm = removeDiacritics(brandVal.toLowerCase());
+    const descNorm = removeDiacritics(description.toLowerCase());
+
+    let score = 0;
+    // Exact full match
+    if (nameNorm === normalizedQuery) score += 100;
+    // Exact brand + tokens sequence
+    if (normalizedQuery.startsWith(brandNorm)) score += 20;
+    // Token matches in name
+    queryTokens.forEach(t => {
+      if (t.length === 0) return;
+      if (nameNorm.includes(t)) score += 15;
+      else if (brandNorm.includes(t)) score += 8;
+      else if (descNorm.includes(t)) score += 4;
+    });
+    // Typo tolerance: distance <=2 adds partial score
+    const dist = levenshtein(nameNorm.slice(0, normalizedQuery.length), normalizedQuery);
+    if (dist > 0 && dist <= 2) score += 10 - dist * 2; // degrade
+    // Hot / discount boosts
+    if (p.isHot) score += 5;
+    if (p.discount && p.discount > 0) score += Math.min(5, p.discount / 10);
+    return { product: p, _score: score };
+  });
+
+  scored.sort((a, b) => b._score - a._score);
+  const finalProducts = scored.slice(0, Number(limit)).map(s => s.product);
+
+  // Suggestions logic
+  const categories = new Set(finalProducts.map(fp => fp.category?._id?.toString()).filter(Boolean));
+  const avgPrice = finalProducts.length ? finalProducts.reduce((sum, p) => sum + (p.price || 0), 0) / finalProducts.length : 0;
+
+  // Accessory-like keywords
+  const accessoryRegex = /(ốp|op|lưng|lung|case|sạc|sac|tai nghe|ear|charger|cường lực|cuong luc|bao da|adapter)/i;
+
+  const accessorySuggestions = await Product.find({
+    $or: [
+      { name: accessoryRegex },
+      { description: accessoryRegex }
+    ],
+    status: { $ne: 'inactive' }
+  })
+    .sort('-createdAt')
+    .limit(12);
+
+  const similarPriceSuggestions = avgPrice
+    ? await Product.find({
+        price: { $gte: avgPrice * 0.85, $lte: avgPrice * 1.15 },
+        status: { $ne: 'inactive' },
+        _id: { $nin: finalProducts.map(p => p._id) }
+      })
+        .limit(12)
+    : [];
+
+  const hotDealsSuggestions = await Product.find({
+    $or: [ { isHot: true }, { discount: { $gt: 0 } } ],
+    status: { $ne: 'inactive' },
+    _id: { $nin: finalProducts.map(p => p._id) }
+  })
+    .sort('-discount -createdAt')
+    .limit(12);
+
   res.json({
-    products,
+    products: finalProducts,
     total,
     page: Number(page),
-    totalPages: Math.ceil(total / Number(limit))
+    totalPages: Math.ceil(total / Number(limit)),
+    suggestions: {
+      accessories: accessorySuggestions,
+      similarPrice: similarPriceSuggestions,
+      hotDeals: hotDealsSuggestions
+    }
   });
 });
 
