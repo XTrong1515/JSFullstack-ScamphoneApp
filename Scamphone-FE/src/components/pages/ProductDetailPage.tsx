@@ -43,6 +43,8 @@ interface Product {
   description?: string;
   specifications?: { [key: string]: string };
   images?: string[];
+  status?: 'active' | 'inactive' | 'out_of_stock';
+  stock_quantity?: number;
   attributes?: Array<{ name: string; values: string[] }>;
   variants?: Array<{
     attributes: { [key: string]: string };
@@ -457,11 +459,20 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
               <Button
                 ref={buttonRef}
                 onClick={handleAddToCart}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center space-x-2 text-sm sm:text-base py-5 sm:py-6 shadow-lg hover:shadow-xl transition-all"
+                disabled={product.status === 'out_of_stock' || product.status === 'inactive'}
+                className={`w-full flex items-center justify-center space-x-2 text-sm sm:text-base py-5 sm:py-6 shadow-lg transition-all ${
+                  product.status === 'out_of_stock' || product.status === 'inactive'
+                    ? 'bg-gray-300 hover:bg-gray-300 cursor-not-allowed text-black font-bold border-2 border-gray-400'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl'
+                }`}
                 size="lg"
               >
-                <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="font-semibold">Thêm vào giỏ hàng</span>
+                <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+                <span className="font-bold text-base">
+                  {product.status === 'out_of_stock' || product.status === 'inactive' 
+                    ? 'TẠM HẾT HÀNG' 
+                    : 'Thêm vào giỏ hàng'}
+                </span>
               </Button>
               
               <div className="grid grid-cols-2 gap-2 sm:gap-3">

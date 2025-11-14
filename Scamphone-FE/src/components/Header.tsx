@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { ShoppingCart, User, Search, Menu, Phone, ChevronDown, Grid3X3 } from "lucide-react";
+import { ShoppingCart, User, Phone, ChevronDown, Grid3X3 } from "lucide-react";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { CategoryDropdown } from "./CategoryDropdown";
 import { NotificationBadge } from "./NotificationCenter";
+import { SearchBar } from "./SearchBar";
 
 interface User {
   id: string;
@@ -24,6 +24,7 @@ interface HeaderProps {
   onShowUserMenu: () => void;
   onCategorySelect: (categoryId: string, subcategoryId?: string) => void;
   onShowNotifications?: () => void;
+  onSearch?: (query: string) => void;
 }
 
 export function Header({ 
@@ -35,9 +36,14 @@ export function Header({
   onShowCartDropdown,
   onShowUserMenu,
   onCategorySelect,
-  onShowNotifications
+  onShowNotifications,
+  onSearch
 }: HeaderProps) {
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const handleSearch = (value: string) => {
+    if (!value.trim()) return;
+    onSearch?.(value.trim());
+  };
 
   return (
     <>
@@ -76,19 +82,7 @@ export function Header({
 
           {/* Search bar */}
           <div className="flex-1 max-w-2xl mx-8">
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="Tìm kiếm sản phẩm..."
-                className="w-full pl-4 pr-12 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500"
-              />
-              <Button 
-                size="sm" 
-                className="absolute right-1 top-1 bottom-1 bg-blue-600 hover:bg-blue-700"
-              >
-                <Search className="w-4 h-4" />
-              </Button>
-            </div>
+            <SearchBar onSearch={handleSearch} />
           </div>
 
           {/* Actions */}

@@ -312,12 +312,11 @@ const searchProducts = asyncHandler(async (req, res) => {
     ]
   };
 
-  // Only apply status filter if explicitly provided; otherwise include everything except 'inactive'
+  // Apply status filter if explicitly provided; otherwise include all products
   if (status) {
     query.status = status;
-  } else {
-    query.status = { $ne: 'inactive' };
   }
+  // Note: No default filter - includes all products regardless of status
 
   if (category) {
     query.category = category;

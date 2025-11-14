@@ -73,7 +73,7 @@ export function ProductCard({ product, onAddToCart, onProductClick }: ProductCar
         )}
         {isOutOfStock && (
           <Badge className="absolute top-2 left-2 bg-gray-500 text-white">
-            Hết hàng
+            Tạm hết hàng
           </Badge>
         )}
         {isInactive && !isOutOfStock && (
@@ -131,13 +131,13 @@ export function ProductCard({ product, onAddToCart, onProductClick }: ProductCar
           disabled={isUnavailable}
           className={`w-full flex items-center justify-center space-x-2 ${
             isUnavailable
-              ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed text-white'
+              ? 'bg-gray-300 hover:bg-gray-300 cursor-not-allowed text-black font-bold border-2 border-gray-400'
               : 'bg-blue-600 hover:bg-blue-700 text-white'
           }`}
         >
-          <ShoppingCart className="w-4 h-4" />
-          <span>
-            {isOutOfStock ? 'Hết hàng' : isInactive ? 'Ngưng bán' : 'Thêm vào giỏ'}
+          <ShoppingCart className={`w-4 h-4 ${isUnavailable ? 'stroke-[2.5]' : ''}`} />
+          <span className={isUnavailable ? 'font-bold uppercase' : ''}>
+            {isOutOfStock ? 'Tạm hết hàng' : isInactive ? 'Ngưng bán' : 'Thêm vào giỏ'}
           </span>
         </Button>
       </div>

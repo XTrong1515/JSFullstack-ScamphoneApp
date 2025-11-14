@@ -6,7 +6,11 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
-  getAdminProducts
+  getAdminProducts,
+  searchProducts,
+  getBrands,
+  getPriceRange,
+  getSearchSuggestions
 } from '../Controllers/productController.js';
 import { protect, admin } from '../Middleware/authMiddleware.js';
 
@@ -14,6 +18,10 @@ import { protect, admin } from '../Middleware/authMiddleware.js';
 router.get('/admin/all', protect, admin, getAdminProducts);
 
 // Public routes
+router.get('/search', searchProducts);
+router.get('/brands', getBrands);
+router.get('/price-range', getPriceRange);
+router.get('/suggestions', getSearchSuggestions);
 router.get('/', getProducts);
 router.get('/:id', getProductById);
 

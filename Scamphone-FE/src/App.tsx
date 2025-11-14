@@ -23,6 +23,7 @@ import { PaymentPage } from "./components/pages/PaymentPage";
 import { OrderSuccessPage } from "./components/pages/OrderSuccessPage";
 import { NotificationCenter } from "./components/NotificationCenter";
 import { userService } from "./services/userService";
+import { SearchResultsPage } from "./components/pages/SearchResultsPage";
 
 interface Product {
   id: string;
@@ -66,6 +67,7 @@ export default function App() {
   const [resetToken, setResetToken] = useState<string>('');
   const [checkoutData, setCheckoutData] = useState<any>(null);
   const [orderData, setOrderData] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Modal/Dropdown states
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -176,8 +178,15 @@ export default function App() {
         setCheckoutData(data);
       } else if (page === 'order-success') {
         setOrderData(data);
+      } else if (page === 'search') {
+        setSearchQuery(data?.query || '');
       }
     }
+  };
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setCurrentPage('search');
   };
 
   const handleCategorySelect = (categoryId: string, subcategoryId?: string) => {
@@ -274,6 +283,16 @@ export default function App() {
         return <PaymentPage onPageChange={handlePageChange} checkoutData={checkoutData} />;
       case 'order-success':
         return <OrderSuccessPage onPageChange={setCurrentPage} orderData={orderData} />;
+      case 'search':
+        return (
+          <SearchResultsPage
+            query={searchQuery}
+            onPageChange={setCurrentPage}
+            onSearch={handleSearch}
+            onAddToCart={handleAddToCart}
+            onProductClick={handleProductClick}
+          />
+        );
       default:
         return (
           <HomePage 
@@ -309,6 +328,7 @@ export default function App() {
         onShowUserMenu={() => setShowUserMenu(true)}
         onCategorySelect={handleCategorySelect}
         onShowNotifications={() => setShowNotifications(true)}
+        onSearch={handleSearch}
       />
       
       <main className="flex-1">
