@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
+import http from 'http';
+import { Server } from 'socket.io';
 import User from './Models/UserModel.js';
 import userRoutes from './Routes/userRoutes.js';
 import productRoutes from './Routes/productRoutes.js';
@@ -12,11 +14,50 @@ import adminRoutes from './Routes/adminRoutes.js';
 import passwordResetRoutes from './Routes/passwordResetRoutes.js';
 import discountRoutes from './Routes/discountRoutes.js';
 import notificationRoutes from './Routes/notificationRoutes.js';
+import reviewRoutes from './Routes/reviewRoutes.js';
 import { notFound, errorHandler } from './Middleware/errorMiddleware.js';
 
 dotenv.config();
 
 const app = express();
+const httpServer = http.createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+// Store connected users: { userId: socketId }
+export const connectedUsers = new Map();
+
+// Socket.io connection handling
+io.on('connection', (socket) => {
+  console.log(`[SOCKET] User connected: ${socket.id}`);
+
+  // When user logs in, they send their userId
+  socket.on('user_connected', (userId) => {
+    if (userId) {
+      connectedUsers.set(userId, socket.id);
+      console.log(`[SOCKET] User ${userId} mapped to socket ${socket.id}`);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    // Remove user from connected users
+    for (const [userId, socketId] of connectedUsers.entries()) {
+      if (socketId === socket.id) {
+        connectedUsers.delete(userId);
+        console.log(`[SOCKET] User ${userId} disconnected`);
+        break;
+      }
+    }
+  });
+});
+
+// Export io for use in controllers
+export { io };
 
 // Middleware
 app.use(cors());
@@ -72,10 +113,11 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/password', passwordResetRoutes);
 app.use('/api/v1/discounts', discountRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/reviews', reviewRoutes);
 
 // Middleware xử lý lỗi
 app.use(notFound);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`));
+httpServer.listen(PORT, () => console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`));

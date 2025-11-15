@@ -280,6 +280,109 @@ const deleteOrderAdmin = asyncHandler(async (req, res) => {
   res.json({ message: 'Order removed' });
 });
 
+// ------- Dashboard Stats -------
+// @desc    Get dashboard statistics (admin)
+// @route   GET /api/v1/admin/stats
+// @access  Private/Admin
+const getDashboardStats = asyncHandler(async (req, res) => {
+  // 1. Tổng doanh thu từ các đơn hàng đã delivered
+  const revenueResult = await Order.aggregate([
+    { $match: { status: 'delivered' } },
+    { $group: { _id: null, total: { $sum: '$totalPrice' } } }
+  ]);
+  const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+
+  // 2. Tổng số đơn hàng
+  const totalOrders = await Order.countDocuments({});
+
+  // 3. Tổng số sản phẩm
+  const totalProducts = await Product.countDocuments({});
+
+  // 4. Tổng số người dùng
+  const totalUsers = await User.countDocuments({});
+
+  // 5. Doanh thu theo 6 tháng gần nhất
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+  const monthlyRevenueData = await Order.aggregate([
+    {
+      $match: {
+        status: 'delivered',
+        deliveredAt: { $gte: sixMonthsAgo }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          year: { $year: '$deliveredAt' },
+          month: { $month: '$deliveredAt' }
+        },
+        revenue: { $sum: '$totalPrice' }
+      }
+    },
+    { $sort: { '_id.year': 1, '_id.month': 1 } }
+  ]);
+
+  // Format dữ liệu doanh thu theo tháng
+  const monthlyRevenue = monthlyRevenueData.map(item => ({
+    month: `T${item._id.month}/${item._id.year}`,
+    revenue: item.revenue
+  }));
+
+  // 6. Thống kê theo trạng thái đơn hàng
+  const ordersByStatus = await Order.aggregate([
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+
+  // 7. Top 5 sản phẩm bán chạy
+  const topProducts = await Order.aggregate([
+    { $match: { status: { $in: ['processing', 'shipping', 'delivered'] } } },
+    { $unwind: '$orderItems' },
+    {
+      $group: {
+        _id: '$orderItems.product',
+        totalSold: { $sum: '$orderItems.quantity' },
+        revenue: { $sum: { $multiply: ['$orderItems.quantity', '$orderItems.price'] } }
+      }
+    },
+    { $sort: { totalSold: -1 } },
+    { $limit: 5 },
+    {
+      $lookup: {
+        from: 'products',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'productInfo'
+      }
+    },
+    { $unwind: '$productInfo' },
+    {
+      $project: {
+        name: '$productInfo.name',
+        totalSold: 1,
+        revenue: 1,
+        image: '$productInfo.image'
+      }
+    }
+  ]);
+
+  res.json({
+    totalRevenue,
+    totalOrders,
+    totalProducts,
+    totalUsers,
+    monthlyRevenue,
+    ordersByStatus,
+    topProducts
+  });
+});
+
 export {
   getUsers,
   getUserByIdAdmin,
@@ -293,4 +396,5 @@ export {
   getOrderByIdAdmin,
   updateOrderStatusAdmin,
   deleteOrderAdmin,
+  getDashboardStats,
 };

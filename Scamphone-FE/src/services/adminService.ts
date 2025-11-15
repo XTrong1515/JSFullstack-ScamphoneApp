@@ -5,28 +5,22 @@ export interface AdminDashboardStats {
   totalOrders: number;
   totalProducts: number;
   totalRevenue: number;
-  recentOrders: any[];
-  topProducts: any[];
+  monthlyRevenue: Array<{ month: string; revenue: number; orderCount: number }>;
+  ordersByStatus: Array<{ _id: string; count: number }>;
+  topProducts: Array<{
+    _id: string;
+    name: string;
+    totalSold: number;
+    revenue: number;
+    image?: string;
+  }>;
 }
 
 export const adminService = {
   // Dashboard
-  async getDashboardStats() {
-    // Use existing endpoints to get stats
-    const [users, products, orders] = await Promise.all([
-      api.get('/admin/users?limit=1'),
-      api.get('/products/admin/all?limit=1'),
-      api.get('/admin/orders?limit=1')
-    ]);
-    
-    return {
-      totalUsers: users.data.total || 0,
-      totalProducts: products.data.total || 0,
-      totalOrders: orders.data.total || 0,
-      totalRevenue: 0, // Can be calculated from orders if needed
-      recentOrders: [],
-      topProducts: []
-    };
+  async getDashboardStats(): Promise<AdminDashboardStats> {
+    const { data } = await api.get('/admin/stats');
+    return data;
   },
 
   // User Management

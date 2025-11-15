@@ -6,6 +6,9 @@ export interface OrderItem {
   quantity: number;
   price: number;
   image?: string;
+  // Thông tin biến thể (nếu khách hàng mua variant cụ thể)
+  variantAttributes?: { [key: string]: string }; // { "Màu sắc": "Đen", "Dung lượng": "256GB" }
+  sku?: string; // Mã SKU của variant
 }
 
 export interface ShippingAddress {

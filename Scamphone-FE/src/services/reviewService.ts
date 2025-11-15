@@ -11,6 +11,7 @@ export interface Review {
   rating: number;
   comment: string;
   createdAt: string;
+  isVerifiedPurchase?: boolean;
 }
 
 export interface ReviewCreateData {

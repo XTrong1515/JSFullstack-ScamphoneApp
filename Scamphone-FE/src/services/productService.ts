@@ -21,6 +21,18 @@ export interface Product {
   status?: 'active' | 'inactive' | 'out_of_stock';
   isHot?: boolean;
   isNewProduct?: boolean;
+  attributes?: {
+    name: string;
+    values: string[];
+  }[];
+  variants?: {
+    attributes: Record<string, string>;
+    price: number;
+    originalPrice?: number;
+    stock: number;
+    sku?: string;
+    image?: string;
+  }[];
   createdAt: string;
   updatedAt: string;
 }

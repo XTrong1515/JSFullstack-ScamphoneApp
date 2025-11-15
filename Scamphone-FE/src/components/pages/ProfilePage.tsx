@@ -1,382 +1,352 @@
-import { useState, useEffect } from "react";
-import { User, Mail, Phone, MapPin, Edit2, Save, X, Home, ShoppingBag, Award, Calendar, Shield } from "lucide-react";
-import { Card } from "../ui/card";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { userService } from "../../services/userService";
+import { useState, useEffect } from 'react';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Card } from '../ui/card';
+import { Alert, AlertDescription } from '../ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Switch } from '../ui/switch';
+import { Loader2, Camera, Check } from 'lucide-react';
+import { profileService, UserProfile } from '../../services/profileService';
+import { ImageWithFallback } from '../figma/ImageWithFallback';
 
-interface UserProfile {
-  _id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  address?: string;
-  role: string;
-  createdAt: string;
+interface ProfilePageProps {
+  onPageChange: (page: string) => void;
+  onUpdateProfile?: (profile: UserProfile) => void;
 }
 
-interface UserStats {
-  ordersCount: number;
-  points: number;
-  notificationsCount: number;
-}
-
-export function ProfilePage({ onPageChange }: { onPageChange: (page: string) => void }) {
+export function ProfilePage({ onPageChange, onUpdateProfile }: ProfilePageProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [stats, setStats] = useState<UserStats>({ ordersCount: 0, points: 0, notificationsCount: 0 });
-  const [loading, setLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    address: "",
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
   });
 
   useEffect(() => {
     loadProfile();
-    loadStats();
   }, []);
-
-  const loadStats = async () => {
-    try {
-      const data = await userService.getUserStats();
-      setStats(data);
-    } catch (error) {
-      console.error("Error loading stats:", error);
-    }
-  };
 
   const loadProfile = async () => {
     try {
-      setLoading(true);
-      const data = await userService.getCurrentUser();
+      const data = await profileService.getProfile();
       setProfile(data);
-      setFormData({
-        name: data.name,
-        phone: (data as any).phone || "",
-        address: (data as any).address || "",
-      });
-    } catch (error) {
-      console.error("Error loading profile:", error);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Không thể tải thông tin người dùng');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const handleSave = async () => {
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile) return;
+
+    setIsSaving(true);
+    setError('');
+    setSuccess('');
+
     try {
-      await userService.updateProfile({
-        name: formData.name,
-        phone: formData.phone,
-        address: formData.address,
+      const updatedProfile = await profileService.updateProfile({
+        name: profile.name,
+        phone: profile.phone,
+        address: profile.address
       });
-      alert("Cập nhật thông tin thành công!");
-      setIsEditing(false);
-      loadProfile();
-    } catch (error) {
-      console.error("Error updating profile:", error);
-      alert("Có lỗi xảy ra khi cập nhật thông tin!");
+      
+      setProfile(updatedProfile);
+      if (onUpdateProfile) {
+        onUpdateProfile(updatedProfile);
+      }
+      setSuccess('Cập nhật thông tin thành công');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Không thể cập nhật thông tin');
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  if (loading) {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSelectedFile(file);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { avatarUrl } = await profileService.uploadAvatar(file);
+      setProfile(prev => prev ? { ...prev, avatar: avatarUrl } : null);
+      setSuccess('Cập nhật ảnh đại diện thành công');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Không thể cập nhật ảnh đại diện');
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setError('Mật khẩu xác nhận không khớp');
+      return;
+    }
+
+    setIsSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      await profileService.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      });
+      
+      setSuccess('Đổi mật khẩu thành công');
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Không thể đổi mật khẩu');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handlePreferencesChange = async (key: keyof UserProfile['preferences'], value: boolean) => {
+    if (!profile) return;
+
+    try {
+      const updatedProfile = await profileService.updatePreferences({
+        ...profile.preferences,
+        [key]: value
+      });
+      setProfile(updatedProfile);
+      setSuccess('Cập nhật tùy chọn thành công');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Không thể cập nhật tùy chọn');
+    }
+  };
+
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Đang tải thông tin...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
 
   if (!profile) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-600">Không tìm thấy thông tin người dùng</p>
-      </div>
+      <Alert variant="destructive" className="max-w-md mx-auto mt-8">
+        <AlertDescription>Không thể tải thông tin người dùng</AlertDescription>
+      </Alert>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
-      {/* Header with Back Button */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Button
-            variant="outline"
-            onClick={() => onPageChange('home')}
-            className="flex items-center gap-2"
-          >
-            <Home className="w-4 h-4" />
-            Về trang chủ
-          </Button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Tài khoản của tôi
-          </h1>
-          <div className="w-[120px]"></div> {/* Spacer for centering */}
-        </div>
-      </div>
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-8">Thông tin tài khoản</h1>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Profile Header Card */}
-        <Card className="p-8 mb-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32"></div>
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full -ml-24 -mb-24"></div>
-          
-          <div className="relative flex items-center gap-6">
-            <div className="relative">
-              <div className="w-32 h-32 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border-4 border-white/30">
-                <User className="w-16 h-16 text-white" />
-              </div>
-              {profile?.role === 'admin' && (
-                <div className="absolute -bottom-2 -right-2 bg-yellow-400 rounded-full p-2">
-                  <Shield className="w-5 h-5 text-yellow-900" />
+      <Tabs defaultValue="profile" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="profile">Thông tin cá nhân</TabsTrigger>
+          <TabsTrigger value="security">Bảo mật</TabsTrigger>
+          <TabsTrigger value="preferences">Tùy chọn</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile">
+          <Card className="p-6">
+            <form onSubmit={handleUpdateProfile} className="space-y-6">
+              {/* Avatar */}
+              <div className="flex items-center space-x-4">
+                <div className="relative">
+                  <ImageWithFallback
+                    src={profile.avatar || '/default-avatar.png'}
+                    alt={profile.name}
+                    className="w-20 h-20 rounded-full object-cover"
+                  />
+                  <label
+                    htmlFor="avatar-upload"
+                    className="absolute bottom-0 right-0 bg-blue-600 text-white p-1.5 rounded-full cursor-pointer hover:bg-blue-700"
+                  >
+                    <Camera className="w-4 h-4" />
+                  </label>
+                  <input
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                  />
                 </div>
-              )}
-            </div>
-            
-            <div className="flex-1">
-              <h2 className="text-3xl font-bold mb-2">{profile?.name}</h2>
-              <p className="text-white/90 mb-3 flex items-center gap-2">
-                <Mail className="w-4 h-4" />
-                {profile?.email}
-              </p>
-              <div className="flex items-center gap-4">
-                <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-sm font-medium">
-                  {profile?.role === 'admin' ? '👑 Quản trị viên' : '👤 Khách hàng'}
-                </span>
-                <span className="flex items-center gap-1 text-sm text-white/90">
-                  <Calendar className="w-4 h-4" />
-                  Tham gia: {new Date(profile?.createdAt || '').toLocaleDateString('vi-VN')}
-                </span>
+                <div>
+                  <h3 className="font-medium">{profile.name}</h3>
+                  <p className="text-sm text-gray-500">{profile.email}</p>
+                </div>
               </div>
-            </div>
 
-            {!isEditing && (
-              <Button
-                variant="outline"
-                className="bg-white/10 backdrop-blur-sm text-white border-white/30 hover:bg-white/20"
-                onClick={() => setIsEditing(true)}
-              >
-                <Edit2 className="w-4 h-4 mr-2" />
-                Chỉnh sửa
+              {/* Form Fields */}
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Họ tên</Label>
+                  <Input
+                    id="name"
+                    value={profile.name}
+                    onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="phone">Số điện thoại</Label>
+                  <Input
+                    id="phone"
+                    value={profile.phone}
+                    onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="address">Địa chỉ</Label>
+                  <Input
+                    id="address"
+                    value={profile.address}
+                    onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {success && (
+                <Alert className="bg-green-50 border-green-200">
+                  <Check className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-600">
+                    {success}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Đang lưu...
+                  </>
+                ) : (
+                  'Lưu thay đổi'
+                )}
               </Button>
-            )}
-          </div>
-        </Card>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => onPageChange('orders')}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Đơn hàng</p>
-                <p className="text-3xl font-bold text-blue-600">{stats.ordersCount}</p>
-              </div>
-              <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center">
-                <ShoppingBag className="w-7 h-7 text-blue-600" />
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">Nhấn để xem chi tiết</p>
+            </form>
           </Card>
+        </TabsContent>
 
-          <Card className="p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Điểm tích lũy</p>
-                <p className="text-3xl font-bold text-purple-600">{stats.points}</p>
-              </div>
-              <div className="w-14 h-14 bg-purple-100 rounded-full flex items-center justify-center">
-                <Award className="w-7 h-7 text-purple-600" />
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">Đổi quà tặng</p>
-          </Card>
-
-          <Card className="p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Thành viên</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {profile?.role === 'admin' ? 'VIP' : 'Bạc'}
-                </p>
-              </div>
-              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
-                <User className="w-7 h-7 text-green-600" />
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">Nâng cấp hạng</p>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Personal Information */}
+        <TabsContent value="security">
           <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold">Thông tin cá nhân</h3>
-              {isEditing && (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setIsEditing(false);
-                      setFormData({
-                        name: profile?.name || "",
-                        phone: (profile as any)?.phone || "",
-                        address: (profile as any)?.address || "",
-                      });
-                    }}
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Hủy
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 text-white"
-                    onClick={handleSave}
-                  >
-                    <Save className="w-4 h-4 mr-2" />
-                    Lưu
-                  </Button>
-                </div>
-              )}
-            </div>
+            <form onSubmit={handlePasswordChange} className="space-y-6">
+              <div>
+                <Label htmlFor="currentPassword">Mật khẩu hiện tại</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({
+                    ...passwordForm,
+                    currentPassword: e.target.value
+                  })}
+                  required
+                />
+              </div>
 
-            <div className="space-y-5">
-              {/* Name */}
-              <div className="group">
-                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                  <User className="w-4 h-4 mr-2 text-gray-500" />
-                  Họ và tên
-                </label>
-                {isEditing ? (
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Nhập họ và tên"
-                    className="border-2 focus:border-blue-500"
-                  />
+              <div>
+                <Label htmlFor="newPassword">Mật khẩu mới</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({
+                    ...passwordForm,
+                    newPassword: e.target.value
+                  })}
+                  required
+                  minLength={6}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="confirmPassword">Xác nhận mật khẩu mới</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({
+                    ...passwordForm,
+                    confirmPassword: e.target.value
+                  })}
+                  required
+                  minLength={6}
+                />
+              </div>
+
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Đang cập nhật...
+                  </>
                 ) : (
-                  <p className="text-gray-900 font-medium pl-6">{profile?.name}</p>
+                  'Đổi mật khẩu'
                 )}
-              </div>
-
-              {/* Email */}
-              <div className="group">
-                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                  <Mail className="w-4 h-4 mr-2 text-gray-500" />
-                  Email
-                </label>
-                <p className="text-gray-900 font-medium pl-6">{profile?.email}</p>
-                <p className="text-xs text-gray-500 mt-1 pl-6">📧 Email không thể thay đổi</p>
-              </div>
-
-              {/* Phone */}
-              <div className="group">
-                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                  <Phone className="w-4 h-4 mr-2 text-gray-500" />
-                  Số điện thoại
-                </label>
-                {isEditing ? (
-                  <Input
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="Nhập số điện thoại"
-                    className="border-2 focus:border-blue-500"
-                  />
-                ) : (
-                  <p className="text-gray-900 font-medium pl-6">
-                    {(profile as any)?.phone || "📱 Chưa cập nhật"}
-                  </p>
-                )}
-              </div>
-
-              {/* Address */}
-              <div className="group">
-                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                  <MapPin className="w-4 h-4 mr-2 text-gray-500" />
-                  Địa chỉ
-                </label>
-                {isEditing ? (
-                  <Input
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="Nhập địa chỉ"
-                    className="border-2 focus:border-blue-500"
-                  />
-                ) : (
-                  <p className="text-gray-900 font-medium pl-6">
-                    {(profile as any)?.address || "📍 Chưa cập nhật"}
-                  </p>
-                )}
-              </div>
-            </div>
+              </Button>
+            </form>
           </Card>
+        </TabsContent>
 
-          {/* Security Settings */}
+        <TabsContent value="preferences">
           <Card className="p-6">
-            <h3 className="text-xl font-bold mb-6">Bảo mật & Cài đặt</h3>
-            
-            <div className="space-y-4">
-              {/* Change Password */}
-              <div className="p-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-lg border border-orange-200">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h4 className="font-semibold text-gray-900 mb-1">Đổi mật khẩu</h4>
-                    <p className="text-sm text-gray-600">
-                      Cập nhật mật khẩu định kỳ để bảo vệ tài khoản
-                    </p>
-                  </div>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base">Thông báo</Label>
+                  <p className="text-sm text-gray-500">
+                    Nhận thông báo về đơn hàng và khuyến mãi
+                  </p>
                 </div>
-                <Button 
-                  variant="outline" 
-                  className="w-full bg-white hover:bg-orange-50 border-orange-300"
-                >
-                  🔒 Đổi mật khẩu
-                </Button>
+                <Switch
+                  checked={profile.preferences.notifications}
+                  onCheckedChange={(checked: boolean) => 
+                    handlePreferencesChange('notifications', checked)
+                  }
+                />
               </div>
 
-              {/* Notification Settings */}
-              <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h4 className="font-semibold text-gray-900 mb-1">Thông báo</h4>
-                    <p className="text-sm text-gray-600">
-                      Nhận thông báo về đơn hàng và khuyến mãi
-                    </p>
-                  </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base">Đăng ký nhận tin</Label>
+                  <p className="text-sm text-gray-500">
+                    Nhận email về sản phẩm mới và ưu đãi đặc biệt
+                  </p>
                 </div>
-                <Button 
-                  variant="outline"
-                  className="w-full bg-white hover:bg-blue-50 border-blue-300"
-                >
-                  🔔 Cài đặt thông báo
-                </Button>
-              </div>
-
-              {/* Privacy */}
-              <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h4 className="font-semibold text-gray-900 mb-1">Quyền riêng tư</h4>
-                    <p className="text-sm text-gray-600">
-                      Quản lý dữ liệu cá nhân và quyền riêng tư
-                    </p>
-                  </div>
-                </div>
-                <Button 
-                  variant="outline"
-                  className="w-full bg-white hover:bg-purple-50 border-purple-300"
-                >
-                  🛡️ Cài đặt riêng tư
-                </Button>
+                <Switch
+                  checked={profile.preferences.newsletter}
+                  onCheckedChange={(checked: boolean) => 
+                    handlePreferencesChange('newsletter', checked)
+                  }
+                />
               </div>
             </div>
           </Card>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

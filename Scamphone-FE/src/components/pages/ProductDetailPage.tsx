@@ -8,6 +8,7 @@ import { Label } from "../ui/label";
 import { Loader2 } from "lucide-react";
 import { reviewService, Review } from "../../services/reviewService";
 import { socialService, SocialStats } from "../../services/socialService";
+import { productService } from "../../services/productService";
 import { Card, CardContent } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { CommentSection } from "../CommentSection";
@@ -31,7 +32,7 @@ import { ImageWithFallback } from "../figma/ImageWithFallback";
 import { AddToCartAnimation } from "../AddToCartAnimation";
 
 interface Product {
-  id: string;
+  id?: string;
   _id: string;
   name: string;
   price: number;
@@ -68,7 +69,9 @@ interface ReviewFormData {
   comment: string;
 }
 
-export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: ProductDetailPageProps) {
+export function ProductDetailPage({ product: initialProduct, user, onPageChange, onAddToCart }: ProductDetailPageProps) {
+  const [product, setProduct] = useState<Product>(initialProduct);
+  const [isLoadingProduct, setIsLoadingProduct] = useState(false);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -107,6 +110,31 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
   const [selectedStorage, setSelectedStorage] = useState("256GB");
   const [triggerAnimation, setTriggerAnimation] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Fetch full product details from API
+  useEffect(() => {
+    const fetchProductDetails = async () => {
+      try {
+        setIsLoadingProduct(true);
+        const productId = (initialProduct._id || initialProduct.id) as string;
+        console.log('🔍 Fetching product with ID:', productId);
+        const fullProduct = await productService.getProductById(productId);
+        console.log('✅ Full product fetched:', fullProduct);
+        console.log('📦 Attributes:', fullProduct.attributes);
+        console.log('🎨 Variants:', fullProduct.variants);
+        console.log('🖼️ Images:', fullProduct.images);
+        setProduct(fullProduct as Product);
+      } catch (err) {
+        console.error('❌ Error fetching product:', err);
+        // Fall back to initial product if fetch fails
+        setProduct(initialProduct);
+      } finally {
+        setIsLoadingProduct(false);
+      }
+    };
+    
+    fetchProductDetails();
+  }, [initialProduct._id, initialProduct.id]);
 
   // Initialize selected attributes and variant
   useEffect(() => {
@@ -169,7 +197,26 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
     }).format(price);
   };
 
-  const images = product.images || [product.image, product.image, product.image];
+  // Validate and prepare images array
+  const images = (() => {
+    const imageArray = product.images && product.images.length > 0 
+      ? product.images 
+      : product.image 
+      ? [product.image] 
+      : [];
+    
+    // Filter out invalid URLs (empty strings, null, undefined)
+    const validImages = imageArray.filter(img => 
+      img && 
+      typeof img === 'string' && 
+      img.trim() !== '' &&
+      (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:'))
+    );
+    
+    return validImages.length > 0 
+      ? validImages 
+      : ['https://via.placeholder.com/400x400?text=No+Image'];
+  })();
   
   // Remove hardcoded colors/storage - will use dynamic attributes
   // const colors = ["Đen", "Trắng", "Xanh", "Tím"];
@@ -188,11 +235,12 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
   useEffect(() => {
     loadReviews();
     loadSocialData();
-  }, [product._id, user?._id]);
+  }, [product._id || product.id, user?._id]);
 
   const loadSocialData = async () => {
     try {
-      const stats = await socialService.getProductSocialStats(product._id);
+      const productId = (product._id || product.id) as string;
+      const stats = await socialService.getProductSocialStats(productId);
       setSocialStats(stats);
       setIsFavorited(stats.userHasFavorited);
     } catch (err: any) {
@@ -219,7 +267,8 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
   const checkFavoriteStatus = async () => {
     if (user) {
       try {
-        const isFav = await socialService.isProductFavorited(product._id);
+        const productId = (product._id || product.id) as string;
+        const isFav = await socialService.isProductFavorited(productId);
         setIsFavorited(isFav);
       } catch (err) {
         console.error('Error checking favorite status:', err);
@@ -230,7 +279,8 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
   const loadReviews = async () => {
     setIsLoadingReviews(true);
     try {
-      const data = await reviewService.getProductReviews(product._id);
+      const productId = (product._id || product.id) as string;
+      const data = await reviewService.getProductReviews(productId);
       setReviews(data.reviews);
       setTotalReviews(data.total);
     } catch (err) {
@@ -279,8 +329,9 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
     setReviewError('');
 
     try {
+      const productId = (product._id || product.id) as string;
       await reviewService.createReview({
-        product: product._id,
+        product: productId,
         rating: reviewForm.rating,
         comment: reviewForm.comment
       });
@@ -318,11 +369,13 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
           {/* Images */}
           <div className="space-y-3 sm:space-y-4">
             <div className="relative bg-white rounded-lg p-2 sm:p-4">
-              <ImageWithFallback
-                src={images[selectedImage]}
-                alt={product.name}
-                className="w-full h-64 sm:h-80 lg:h-96 object-contain rounded-lg transition-transform duration-300 hover:scale-105"
-              />
+              <div className="aspect-square overflow-hidden rounded-lg">
+                <ImageWithFallback
+                  src={images[selectedImage]}
+                  alt={product.name}
+                  className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                />
+              </div>
               {product.discount && (
                 <Badge className="absolute top-4 left-4 bg-red-500 text-white text-xs sm:text-sm">
                   -{product.discount}%
@@ -340,7 +393,7 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
                 <button
                   key={index}
                   onClick={() => setSelectedImage(index)}
-                  className={`flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                  className={`flex-shrink-0 aspect-square w-16 sm:w-20 rounded-lg overflow-hidden border-2 transition-all ${
                     selectedImage === index ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-400'
                   }`}
                 >
@@ -406,27 +459,54 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
               )}
             </div>
 
-            {/* Dynamic Variant Selector */}
-            {product.attributes && product.attributes.length > 0 && (
+            {/* Attributes Selection */}
+            {product.attributes && product.attributes.length > 0 ? (
               <div className="space-y-3 sm:space-y-4">
                 {product.attributes.map((attr) => (
                   <div key={attr.name} className="bg-white p-3 sm:p-4 rounded-lg">
                     <h3 className="font-medium mb-2 text-sm sm:text-base">{attr.name}:</h3>
                     <div className="flex flex-wrap gap-2">
-                      {attr.values.map((value) => (
-                        <Button
-                          key={value}
-                          variant={selectedAttributes[attr.name] === value ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => handleAttributeSelect(attr.name, value)}
-                          className={`text-xs sm:text-sm ${selectedAttributes[attr.name] === value ? "bg-blue-600 hover:bg-blue-700" : ""}`}
-                        >
-                          {value}
-                        </Button>
-                      ))}
+                      {attr.values.map((value) => {
+                        // Find variant for this attribute value
+                        const testAttributes = { ...selectedAttributes, [attr.name]: value };
+                        const matchingVariant = product.variants?.find(variant => 
+                          Object.keys(testAttributes).every(key => 
+                            variant.attributes[key] === testAttributes[key]
+                          )
+                        );
+                        const isOutOfStock = matchingVariant && matchingVariant.stock === 0;
+                        const isDisabled = !matchingVariant || isOutOfStock;
+
+                        return (
+                          <Button
+                            key={value}
+                            variant={selectedAttributes[attr.name] === value ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleAttributeSelect(attr.name, value)}
+                            disabled={isDisabled}
+                            className={`text-xs sm:text-sm flex flex-col items-center gap-1 h-auto py-2 ${
+                              selectedAttributes[attr.name] === value ? "bg-blue-600 hover:bg-blue-700" : ""
+                            } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                          >
+                            <span className={isOutOfStock ? "line-through" : ""}>{value}</span>
+                            {matchingVariant && (
+                              <span className="text-[10px] font-normal">
+                                {new Intl.NumberFormat('vi-VN').format(matchingVariant.price)}đ
+                              </span>
+                            )}
+                            {isOutOfStock && (
+                              <span className="text-[9px] text-red-500">Hết hàng</span>
+                            )}
+                          </Button>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
+              </div>
+            ) : (
+              <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-500">
+                Sản phẩm này chưa có thuộc tính. Vui lòng liên hệ quản trị viên để cập nhật.
               </div>
             )}
 
@@ -477,7 +557,7 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
               
               <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 <FavoriteButton
-                  productId={product._id}
+                  productId={(product._id || product.id || '') as string}
                   isFavorited={isFavorited}
                   onFavoriteChange={setIsFavorited}
                   disabled={!user}
@@ -495,7 +575,7 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
               <ShareDialog
                 isOpen={isShareDialogOpen}
                 onClose={() => setIsShareDialogOpen(false)}
-                productId={product._id}
+                productId={(product._id || product.id) as string}
                 title={product.name}
                 description={product.description || ""}
                 image={product.image}
@@ -654,6 +734,14 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-1">
                               <span className="font-medium">{review.user.name}</span>
+                              {review.isVerifiedPurchase && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                  </svg>
+                                  Đã mua hàng
+                                </span>
+                              )}
                               <div className="flex">
                                 {[...Array(5)].map((_, i) => (
                                   <Star
@@ -683,7 +771,7 @@ export function ProductDetailPage({ product, user, onPageChange, onAddToCart }: 
 
               <TabsContent value="comments" className="p-6">
                 <CommentSection
-                  productId={product._id}
+                  productId={(product._id || product.id) as string}
                   user={user}
                 />
               </TabsContent>

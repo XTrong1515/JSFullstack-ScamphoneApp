@@ -13,8 +13,12 @@ import {
   getOrderByIdAdmin,
   updateOrderStatusAdmin,
   deleteOrderAdmin,
+  getDashboardStats,
 } from '../Controllers/adminController.js';
 import { protect, admin } from '../Middleware/authMiddleware.js';
+
+// Dashboard Stats
+router.get('/stats', protect, admin, getDashboardStats);
 
 // Users
 router.get('/users', protect, admin, getUsers);

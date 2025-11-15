@@ -143,9 +143,48 @@ const confirmOrder = asyncHandler(async (req, res) => {
       res.status(404);
       throw new Error(`Không tìm thấy sản phẩm: ${item.name}`);
     }
-    if (product.stock_quantity < item.quantity) {
-      res.status(400);
-      throw new Error(`Sản phẩm ${item.name} không đủ hàng trong kho (Còn: ${product.stock_quantity}, Cần: ${item.quantity})`);
+
+    // Nếu có thông tin variant (sku hoặc variantAttributes), kiểm tra stock của variant
+    if (item.sku || item.variantAttributes) {
+      let variant;
+      
+      // Tìm variant theo SKU (ưu tiên)
+      if (item.sku) {
+        variant = product.variants.find(v => v.sku === item.sku);
+      } 
+      // Hoặc tìm theo variantAttributes
+      else if (item.variantAttributes) {
+        variant = product.variants.find(v => {
+          if (!v.attributes) return false;
+          const variantAttrsObj = v.attributes.toObject ? v.attributes.toObject() : v.attributes;
+          const itemAttrsObj = item.variantAttributes.toObject ? item.variantAttributes.toObject() : item.variantAttributes;
+          
+          return Object.keys(itemAttrsObj).every(key => 
+            variantAttrsObj[key] === itemAttrsObj[key]
+          );
+        });
+      }
+
+      if (!variant) {
+        res.status(404);
+        throw new Error(`Không tìm thấy biến thể của sản phẩm: ${item.name}`);
+      }
+
+      if (variant.stock < item.quantity) {
+        res.status(400);
+        const attrsStr = item.variantAttributes 
+          ? Object.entries(item.variantAttributes.toObject ? item.variantAttributes.toObject() : item.variantAttributes)
+              .map(([k, v]) => `${k}: ${v}`).join(', ')
+          : item.sku;
+        throw new Error(`Sản phẩm ${item.name} (${attrsStr}) không đủ hàng trong kho (Còn: ${variant.stock}, Cần: ${item.quantity})`);
+      }
+    } 
+    // Nếu không có variant, kiểm tra stock_quantity của sản phẩm cha
+    else {
+      if (product.stock_quantity < item.quantity) {
+        res.status(400);
+        throw new Error(`Sản phẩm ${item.name} không đủ hàng trong kho (Còn: ${product.stock_quantity}, Cần: ${item.quantity})`);
+      }
     }
   }
 
@@ -153,7 +192,36 @@ const confirmOrder = asyncHandler(async (req, res) => {
   for (const item of order.orderItems) {
     const product = await Product.findById(item.product);
     if (product) {
-      product.stock_quantity -= item.quantity;
+      // Nếu có variant, trừ stock của variant
+      if (item.sku || item.variantAttributes) {
+        let variantIndex = -1;
+        
+        // Tìm variant theo SKU
+        if (item.sku) {
+          variantIndex = product.variants.findIndex(v => v.sku === item.sku);
+        } 
+        // Hoặc tìm theo variantAttributes
+        else if (item.variantAttributes) {
+          variantIndex = product.variants.findIndex(v => {
+            if (!v.attributes) return false;
+            const variantAttrsObj = v.attributes.toObject ? v.attributes.toObject() : v.attributes;
+            const itemAttrsObj = item.variantAttributes.toObject ? item.variantAttributes.toObject() : item.variantAttributes;
+            
+            return Object.keys(itemAttrsObj).every(key => 
+              variantAttrsObj[key] === itemAttrsObj[key]
+            );
+          });
+        }
+
+        if (variantIndex >= 0) {
+          product.variants[variantIndex].stock -= item.quantity;
+        }
+      } 
+      // Nếu không có variant, trừ stock_quantity của sản phẩm cha
+      else {
+        product.stock_quantity -= item.quantity;
+      }
+      
       await product.save();
     }
   }
@@ -241,12 +309,42 @@ const cancelOrder = asyncHandler(async (req, res) => {
   order.cancelledAt = new Date();
   order.rejectionReason = undefined;
 
+  // Hoàn trả stock nếu đơn hàng đã được xác nhận (processing)
   if (previousStatus === 'processing') {
     for (const item of order.orderItems) {
       if (!item.product) continue;
       const product = await Product.findById(item.product);
       if (product) {
-        product.stock_quantity += item.quantity;
+        // Nếu có variant, hoàn trả stock của variant
+        if (item.sku || item.variantAttributes) {
+          let variantIndex = -1;
+          
+          // Tìm variant theo SKU
+          if (item.sku) {
+            variantIndex = product.variants.findIndex(v => v.sku === item.sku);
+          } 
+          // Hoặc tìm theo variantAttributes
+          else if (item.variantAttributes) {
+            variantIndex = product.variants.findIndex(v => {
+              if (!v.attributes) return false;
+              const variantAttrsObj = v.attributes.toObject ? v.attributes.toObject() : v.attributes;
+              const itemAttrsObj = item.variantAttributes.toObject ? item.variantAttributes.toObject() : item.variantAttributes;
+              
+              return Object.keys(itemAttrsObj).every(key => 
+                variantAttrsObj[key] === itemAttrsObj[key]
+              );
+            });
+          }
+
+          if (variantIndex >= 0) {
+            product.variants[variantIndex].stock += item.quantity;
+          }
+        } 
+        // Nếu không có variant, hoàn trả stock_quantity của sản phẩm cha
+        else {
+          product.stock_quantity += item.quantity;
+        }
+        
         await product.save();
       }
     }

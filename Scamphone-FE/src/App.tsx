@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { io, Socket } from "socket.io-client";
+import { toast, Toaster } from "sonner";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { HomePage } from "./components/pages/HomePage";
@@ -68,6 +70,7 @@ export default function App() {
   const [checkoutData, setCheckoutData] = useState<any>(null);
   const [orderData, setOrderData] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [socket, setSocket] = useState<Socket | null>(null);
   
   // Modal/Dropdown states
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -106,6 +109,49 @@ export default function App() {
     };
     loadUser();
   }, []);
+
+  // Socket.io connection - connect when user logs in
+  useEffect(() => {
+    if (user) {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const newSocket = io(API_URL, {
+        transports: ['websocket', 'polling'],
+        reconnection: true
+      });
+
+      newSocket.on('connect', () => {
+        console.log('[SOCKET] Connected to server');
+        // Send user ID to server to map socket
+        newSocket.emit('user_connected', user.id);
+      });
+
+      newSocket.on('new_notification', (notification) => {
+        console.log('[SOCKET] Received notification:', notification);
+        toast.success(notification.title, {
+          description: notification.message,
+          duration: 5000
+        });
+        // Trigger refresh of notification badge/list if needed
+        setShowNotifications(false); // Force re-render
+      });
+
+      newSocket.on('disconnect', () => {
+        console.log('[SOCKET] Disconnected from server');
+      });
+
+      setSocket(newSocket);
+
+      return () => {
+        newSocket.close();
+      };
+    } else {
+      // Disconnect socket if user logs out
+      if (socket) {
+        socket.close();
+        setSocket(null);
+      }
+    }
+  }, [user]);
 
   // Save cart to localStorage when it changes (per user)
   useEffect(() => {
@@ -370,6 +416,9 @@ export default function App() {
 
       {/* Scroll to Top Button */}
       <ScrollToTop />
+
+      {/* Toast notifications */}
+      <Toaster position="top-right" richColors />
     </div>
   );
 }

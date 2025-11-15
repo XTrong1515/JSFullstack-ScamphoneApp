@@ -5,7 +5,10 @@ const orderItemSchema = new mongoose.Schema({
     name: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true },
-    image: { type: String }
+    image: { type: String },
+    // Thông tin biến thể (nếu khách hàng mua variant cụ thể)
+    variantAttributes: { type: Map, of: String }, // { "Màu sắc": "Đen", "Dung lượng": "256GB" }
+    sku: { type: String } // Mã SKU của variant (nếu có)
 });
 
 const shippingAddressSchema = new mongoose.Schema({

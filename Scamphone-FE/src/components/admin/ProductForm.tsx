@@ -4,6 +4,7 @@ import { X, Plus, Trash2, Loader2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card } from "../ui/card";
+import { Badge } from "../ui/badge";
 import { adminService } from "../../services/adminService";
 
 interface ProductFormProps {
@@ -105,6 +106,8 @@ export function ProductForm({ product, onClose, onSuccess, categories }: Product
   };
 
   const [formData, setFormData] = useState(getInitialFormData());
+  const [newAttributeValues, setNewAttributeValues] = useState<{ [key: number]: string }>({});
+  const [imageInputMode, setImageInputMode] = useState<{ [key: number]: 'url' | 'file' }>({});
 
   const handleAddImage = () => {
     setFormData({ ...formData, images: [...formData.images, ""] });
@@ -119,6 +122,37 @@ export function ProductForm({ product, onClose, onSuccess, categories }: Product
     const newImages = [...formData.images];
     newImages[index] = value;
     setFormData({ ...formData, images: newImages });
+  };
+
+  const handleImageFileChange = async (index: number, file: File | null) => {
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Vui lòng chọn file ảnh!');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Kích thước ảnh không được vượt quá 5MB!');
+      return;
+    }
+
+    try {
+      // Convert to base64 or upload to server
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64 = e.target?.result as string;
+        const newImages = [...formData.images];
+        newImages[index] = base64;
+        setFormData({ ...formData, images: newImages });
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Lỗi khi tải ảnh lên!');
+    }
   };
 
   const handleAddSpecification = () => {
@@ -171,14 +205,31 @@ export function ProductForm({ product, onClose, onSuccess, categories }: Product
     setFormData({ ...formData, attributes: newAttrs });
   };
 
-  const handleAttributeValuesChange = (index: number, valuesStr: string) => {
+  const handleAddAttributeValue = (attrIndex: number) => {
+    const newValue = newAttributeValues[attrIndex]?.trim();
+    if (!newValue) return;
+
     const newAttrs = [...formData.attributes];
-    // Split by comma and trim
-    newAttrs[index].values = valuesStr
-      .split(',')
-      .map(v => v.trim())
-      .filter(v => v !== '');
+    if (!newAttrs[attrIndex].values.includes(newValue)) {
+      newAttrs[attrIndex].values = [...newAttrs[attrIndex].values, newValue];
+      setFormData({ ...formData, attributes: newAttrs });
+    }
+    
+    // Reset input
+    setNewAttributeValues({ ...newAttributeValues, [attrIndex]: '' });
+  };
+
+  const handleRemoveAttributeValue = (attrIndex: number, valueIndex: number) => {
+    const newAttrs = [...formData.attributes];
+    newAttrs[attrIndex].values = newAttrs[attrIndex].values.filter((_, i) => i !== valueIndex);
     setFormData({ ...formData, attributes: newAttrs });
+  };
+
+  const handleAttributeValueKeyPress = (attrIndex: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddAttributeValue(attrIndex);
+    }
   };
 
   // Generate variants from attributes
@@ -251,6 +302,12 @@ export function ProductForm({ product, onClose, onSuccess, categories }: Product
         }
       });
 
+      // Calculate total stock from variants if exists
+      let totalStock = parseInt(formData.stock_quantity);
+      if (formData.variants.length > 0) {
+        totalStock = formData.variants.reduce((sum, v) => sum + parseInt(v.stock.toString() || '0'), 0);
+      }
+
       const productData = {
         name: formData.name,
         description: formData.description,
@@ -258,7 +315,7 @@ export function ProductForm({ product, onClose, onSuccess, categories }: Product
         originalPrice: formData.originalPrice
           ? parseFloat(formData.originalPrice)
           : parseFloat(formData.price),
-        stock_quantity: parseInt(formData.stock_quantity),
+        stock_quantity: totalStock,
         category: formData.category,
         brand: formData.brand,
         images: formData.images.filter((img) => img.trim() !== ""),
@@ -396,6 +453,9 @@ export function ProductForm({ product, onClose, onSuccess, categories }: Product
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">
                       Số lượng <span className="text-red-500">*</span>
+                      {formData.variants.length > 0 && (
+                        <span className="text-xs text-gray-500 ml-2">(Tự động tính)</span>
+                      )}
                     </label>
                     <Input
                       type="number"
@@ -404,6 +464,7 @@ export function ProductForm({ product, onClose, onSuccess, categories }: Product
                       placeholder="100"
                       className="h-10"
                       required
+                      disabled={formData.variants.length > 0}
                     />
                   </div>
 
@@ -491,23 +552,78 @@ export function ProductForm({ product, onClose, onSuccess, categories }: Product
 
               <div className="space-y-2">
                 {formData.images.map((image, index) => (
-                  <div key={index} className="flex gap-2">
-                    <Input
-                      value={image}
-                      onChange={(e) => handleImageChange(index, e.target.value)}
-                      placeholder={`Link ảnh ${index + 1}`}
-                      className="h-9 text-sm"
-                    />
-                    {formData.images.length > 1 && (
+                  <div key={index} className="space-y-2 p-3 bg-gray-50 rounded-lg">
+                    {/* Mode selector */}
+                    <div className="flex gap-2 mb-2">
                       <Button
                         type="button"
-                        variant="outline"
+                        variant={imageInputMode[index] !== 'file' ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => handleRemoveImage(index)}
-                        className="h-9 w-9 p-0 border-red-200 text-red-600 hover:bg-red-50"
+                        onClick={() => setImageInputMode({ ...imageInputMode, [index]: 'url' })}
+                        className="flex-1 h-8 text-xs"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        🔗 Link URL
                       </Button>
+                      <Button
+                        type="button"
+                        variant={imageInputMode[index] === 'file' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setImageInputMode({ ...imageInputMode, [index]: 'file' })}
+                        className="flex-1 h-8 text-xs"
+                      >
+                        📁 Tải lên
+                      </Button>
+                    </div>
+
+                    {/* Input based on mode */}
+                    <div className="flex gap-2">
+                      {imageInputMode[index] === 'file' ? (
+                        <div className="flex-1">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleImageFileChange(index, e.target.files?.[0] || null)}
+                            className="w-full text-sm border border-gray-300 rounded-lg p-2 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                          />
+                          {image && (
+                            <p className="text-xs text-gray-500 mt-1 truncate">
+                              {image.startsWith('data:') ? 'Ảnh đã tải lên' : image}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <Input
+                          value={image}
+                          onChange={(e) => handleImageChange(index, e.target.value)}
+                          placeholder={`Link ảnh ${index + 1}`}
+                          className="flex-1 h-9 text-sm"
+                        />
+                      )}
+                      {formData.images.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemoveImage(index)}
+                          className="h-9 w-9 p-0 border-red-200 text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Image preview */}
+                    {image && (
+                      <div className="mt-2">
+                        <img
+                          src={image}
+                          alt={`Preview ${index + 1}`}
+                          className="h-20 w-20 object-cover rounded border border-gray-200"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://via.placeholder.com/80x80?text=Error';
+                          }}
+                        />
+                      </div>
                     )}
                   </div>
                 ))}
@@ -603,24 +719,47 @@ export function ProductForm({ product, onClose, onSuccess, categories }: Product
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
-                    <Input
-                      value={attr.values.join(', ')}
-                      onChange={(e) => handleAttributeValuesChange(index, e.target.value)}
-                      placeholder="VD: Đen, Trắng, Xanh"
-                      className="h-9 text-sm"
-                    />
-                    {attr.values.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {attr.values.map((val, vIdx) => (
-                          <span
-                            key={vIdx}
-                            className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium"
+                    
+                    {/* Display existing values as badges */}
+                    <div className="flex flex-wrap gap-2">
+                      {attr.values.map((val, vIdx) => (
+                        <Badge
+                          key={vIdx}
+                          variant="secondary"
+                          className="pl-2.5 pr-1 py-1 text-xs font-medium flex items-center gap-1"
+                        >
+                          {val}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttributeValue(index, vIdx)}
+                            className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
                           >
-                            {val}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                            <X className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+
+                    {/* Input to add new value */}
+                    <div className="flex gap-2">
+                      <Input
+                        value={newAttributeValues[index] || ''}
+                        onChange={(e) => setNewAttributeValues({ ...newAttributeValues, [index]: e.target.value })}
+                        onKeyPress={(e) => handleAttributeValueKeyPress(index, e)}
+                        placeholder="Thêm giá trị (nhấn Enter)..."
+                        className="flex-1 h-9 text-sm"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAddAttributeValue(index)}
+                        className="h-9 px-3"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Thêm
+                      </Button>
+                    </div>
                   </div>
                 ))}
 

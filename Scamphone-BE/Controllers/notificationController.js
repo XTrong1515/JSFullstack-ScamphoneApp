@@ -1,4 +1,5 @@
 import Notification from '../Models/NotificationModel.js';
+import { io, connectedUsers } from '../server.js';
 
 // Get user notifications
 const getUserNotifications = async (req, res) => {
@@ -95,6 +96,22 @@ const createNotification = async (userId, data) => {
       user: userId,
       ...data
     });
+
+    // Emit real-time notification via Socket.io
+    const socketId = connectedUsers.get(userId.toString());
+    if (socketId) {
+      io.to(socketId).emit('new_notification', {
+        _id: notification._id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        order: notification.order,
+        isRead: notification.isRead,
+        createdAt: notification.createdAt
+      });
+      console.log(`[SOCKET] Sent notification to user ${userId}`);
+    }
+
     return notification;
   } catch (error) {
     console.error('Error creating notification:', error);

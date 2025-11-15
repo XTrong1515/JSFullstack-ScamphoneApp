@@ -85,7 +85,12 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
         name: item.name,
         quantity: item.quantity,
         price: item.price,
-        image: item.image
+        image: item.image,
+        // Include variant information if product has selected variant
+        ...(item.selectedVariant && {
+          variantAttributes: item.selectedVariant.attributes,
+          sku: item.selectedVariant.sku
+        })
       })),
       shippingAddress: shippingInfo,
       paymentMethod: selectedMethod,

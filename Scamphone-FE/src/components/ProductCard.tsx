@@ -48,11 +48,11 @@ export function ProductCard({ product, onAddToCart, onProductClick }: ProductCar
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-300 overflow-hidden group">
-      <div className="relative cursor-pointer" onClick={() => onProductClick(product)}>
+      <div className="relative cursor-pointer aspect-square overflow-hidden" onClick={() => onProductClick(product)}>
         <ImageWithFallback
           src={product.image}
           alt={product.name}
-          className={`w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300 ${
+          className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${
             isUnavailable ? 'opacity-60' : ''
           }`}
         />
