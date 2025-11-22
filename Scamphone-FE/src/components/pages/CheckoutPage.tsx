@@ -13,6 +13,8 @@ import {
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { useCartStore } from "../../stores/useCartStore";
+import { addressService, Address } from "../../services/addressService";
 
 interface CartItem {
   _id?: string;
@@ -22,6 +24,13 @@ interface CartItem {
   originalPrice?: number;
   quantity: number;
   image?: string;
+  selectedVariant?: {
+    attributes: { [key: string]: string };
+    sku: string;
+    price: number;
+    stock: number;
+    image?: string;
+  };
 }
 
 interface CheckoutPageProps {
@@ -31,8 +40,12 @@ interface CheckoutPageProps {
 }
 
 export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }: CheckoutPageProps) {
+  const { appliedDiscount } = useCartStore();
   const [cartItems, setCartItems] = useState<CartItem[]>(initialCartItems || []);
   const [loading, setLoading] = useState(false);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [useNewAddress, setUseNewAddress] = useState(false);
 
   // Shipping address form
   const [shippingInfo, setShippingInfo] = useState({
@@ -49,6 +62,9 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
       setCartItems(initialCartItems);
     }
 
+    // Load saved addresses
+    loadAddresses();
+
     // Load saved shipping info if exists
     const savedShippingInfo = localStorage.getItem("shippingInfo");
     if (savedShippingInfo) {
@@ -56,12 +72,38 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
     }
   }, [initialCartItems]);
 
+  const loadAddresses = async () => {
+    try {
+      const data = await addressService.getAddresses();
+      setAddresses(data);
+      
+      // Auto-select default address
+      const defaultAddr = data.find(addr => addr.isDefault);
+      if (defaultAddr && defaultAddr._id) {
+        setSelectedAddressId(defaultAddr._id);
+        setShippingInfo({
+          fullName: defaultAddr.fullName,
+          phone: defaultAddr.phone,
+          address: `${defaultAddr.address}, ${defaultAddr.ward}, ${defaultAddr.district}`,
+          city: defaultAddr.city,
+          district: defaultAddr.district
+        });
+      } else if (data.length === 0) {
+        setUseNewAddress(true);
+      }
+    } catch (error) {
+      console.error('Failed to load addresses:', error);
+      setUseNewAddress(true);
+    }
+  };
+
   const calculateSubtotal = () => {
     return cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   };
 
   const shippingFee = 0; // Miễn phí vận chuyển
-  const total = calculateSubtotal() + shippingFee;
+  const discountAmount = appliedDiscount?.discountAmount || 0;
+  const total = calculateSubtotal() - discountAmount + shippingFee;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -187,6 +229,54 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
                 </div>
               </div>
 
+              {/* Address Selector */}
+              {addresses.length > 0 && (
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Chọn địa chỉ có sẵn
+                  </label>
+                  <select
+                    value={selectedAddressId}
+                    onChange={(e) => {
+                      const addressId = e.target.value;
+                      if (addressId === "new") {
+                        setUseNewAddress(true);
+                        setSelectedAddressId("");
+                        setShippingInfo({
+                          fullName: "",
+                          phone: "",
+                          address: "",
+                          city: "",
+                          district: ""
+                        });
+                      } else {
+                        setUseNewAddress(false);
+                        setSelectedAddressId(addressId);
+                        const selected = addresses.find(a => a._id === addressId);
+                        if (selected) {
+                          setShippingInfo({
+                            fullName: selected.fullName,
+                            phone: selected.phone,
+                            address: `${selected.address}, ${selected.ward}, ${selected.district}`,
+                            city: selected.city,
+                            district: selected.district
+                          });
+                        }
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {addresses.map((addr) => (
+                      <option key={addr._id} value={addr._id}>
+                        {addr.fullName} - {addr.phone} - {addr.address}, {addr.ward}, {addr.district}, {addr.city}
+                        {addr.isDefault && " (Mặc định)"}
+                      </option>
+                    ))}
+                    <option value="new">+ Thêm địa chỉ mới</option>
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -199,6 +289,7 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
                     onChange={handleInputChange}
                     placeholder="Nguyễn Văn A"
                     className="h-11"
+                    disabled={!useNewAddress && selectedAddressId !== ""}
                   />
                 </div>
 
@@ -213,6 +304,7 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
                     onChange={handleInputChange}
                     placeholder="0912345678"
                     className="h-11"
+                    disabled={!useNewAddress && selectedAddressId !== ""}
                   />
                 </div>
 
@@ -227,6 +319,7 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
                     onChange={handleInputChange}
                     placeholder="Số nhà, tên đường"
                     className="h-11"
+                    disabled={!useNewAddress && selectedAddressId !== ""}
                   />
                 </div>
 
@@ -241,6 +334,7 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
                       onChange={handleInputChange}
                       placeholder="Quận 1"
                       className="h-11"
+                      disabled={!useNewAddress && selectedAddressId !== ""}
                     />
                   </div>
 
@@ -254,6 +348,7 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
                       onChange={handleInputChange}
                       placeholder="TP. Hồ Chí Minh"
                       className="h-11"
+                      disabled={!useNewAddress && selectedAddressId !== ""}
                     />
                   </div>
                 </div>
@@ -277,6 +372,11 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 truncate">{item.name}</p>
+                      {item.selectedVariant && item.selectedVariant.attributes && Object.keys(item.selectedVariant.attributes).length > 0 && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          📦 {Object.entries(item.selectedVariant.attributes).map(([key, value]) => value).join(', ')}
+                        </p>
+                      )}
                       <p className="text-sm text-gray-600 mt-1">Số lượng: x{item.quantity}</p>
                       <p className="text-sm font-medium text-blue-600 mt-1">
                         ₫{item.price.toLocaleString()} / sản phẩm
@@ -303,6 +403,12 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
                   <span>Tạm tính:</span>
                   <span className="font-medium">₫{calculateSubtotal().toLocaleString()}</span>
                 </div>
+                {appliedDiscount && discountAmount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>🎟️ Giảm giá ({appliedDiscount.code}):</span>
+                    <span className="font-medium">-₫{discountAmount.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-gray-600">
                   <span>Phí vận chuyển:</span>
                   <span className="font-medium text-green-600">Miễn phí</span>

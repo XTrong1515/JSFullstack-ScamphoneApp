@@ -16,6 +16,8 @@ import {
 } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { orderService } from "../../services/orderService";
+import { adminService } from "../../services/adminService";
+import { useCartStore } from "../../stores/useCartStore";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 
 interface CartItem {
@@ -26,6 +28,13 @@ interface CartItem {
   image: string;
   quantity: number;
   discount?: number;
+  selectedVariant?: {
+    attributes: { [key: string]: string };
+    sku: string;
+    price: number;
+    stock: number;
+    image?: string;
+  };
 }
 
 interface CartPageProps {
@@ -44,9 +53,14 @@ interface ShippingAddress {
 }
 
 export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPageProps) {
+  const { setDiscount, removeDiscount, appliedDiscount: storedDiscount } = useCartStore();
   const [promoCode, setPromoCode] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState<any>(storedDiscount);
+  const [discountAmount, setDiscountAmount] = useState(storedDiscount?.discountAmount || 0);
+  const [isApplyingDiscount, setIsApplyingDiscount] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>("");
+  const [discountError, setDiscountError] = useState<string>("");
   const [showCheckout, setShowCheckout] = useState(false);
   const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
     street: "",
@@ -78,6 +92,56 @@ export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPa
   const removeItem = (id: string) => {
     const updatedItems = cartItems.filter(item => item.id !== id);
     onUpdateCart(updatedItems);
+  };
+
+  const handleApplyDiscount = async () => {
+    if (!promoCode.trim()) {
+      setDiscountError("Vui lòng nhập mã giảm giá");
+      return;
+    }
+
+    setIsApplyingDiscount(true);
+    setDiscountError("");
+
+    try {
+      const orderValue = totalAmount;
+      const result = await adminService.validateDiscount(
+        promoCode.trim(),
+        orderValue,
+        user?._id
+      );
+
+      if (result.valid && result.discount) {
+        setAppliedDiscount(result.discount);
+        setDiscountAmount(result.discount.discountAmount || 0);
+        setDiscountError("");
+        
+        // Save to Zustand store
+        setDiscount({
+          code: result.discount.code,
+          name: result.discount.name,
+          discountAmount: result.discount.discountAmount,
+          type: result.discount.type,
+          value: result.discount.value
+        });
+      }
+    } catch (err: any) {
+      setDiscountError(err.response?.data?.message || "Mã giảm giá không hợp lệ");
+      setAppliedDiscount(null);
+      setDiscountAmount(0);
+    } finally {
+      setIsApplyingDiscount(false);
+    }
+  };
+
+  const handleRemoveDiscount = () => {
+    setAppliedDiscount(null);
+    setDiscountAmount(0);
+    setPromoCode("");
+    setDiscountError("");
+    
+    // Remove from Zustand store
+    removeDiscount();
   };
 
   const handleCheckout = async () => {
@@ -140,7 +204,8 @@ export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPa
   }, 0);
   const totalDiscount = originalAmount - totalAmount;
   const shippingFee = totalAmount >= 500000 ? 0 : 30000;
-  const finalAmount = totalAmount + shippingFee;
+  const afterDiscount = totalAmount - discountAmount;
+  const finalAmount = afterDiscount + shippingFee;
 
   if (cartItems.length === 0) {
     return (
@@ -207,6 +272,11 @@ export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPa
                     
                     <div className="flex-1 w-full sm:w-auto">
                       <h3 className="font-medium text-sm sm:text-base text-gray-900 mb-2 line-clamp-2">{item.name}</h3>
+                      {item.selectedVariant && item.selectedVariant.attributes && Object.keys(item.selectedVariant.attributes).length > 0 && (
+                        <p className="text-xs text-gray-600 mb-2">
+                          📦 {Object.entries(item.selectedVariant.attributes).map(([key, value]) => value).join(', ')}
+                        </p>
+                      )}
                       <div className="flex flex-wrap items-center gap-2 mb-3">
                         <span className="text-base sm:text-lg font-bold text-blue-600">
                           {formatPrice(item.price)}
@@ -288,6 +358,13 @@ export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPa
                   </div>
                 )}
                 
+                {appliedDiscount && discountAmount > 0 && (
+                  <div className="flex justify-between text-green-600 text-sm sm:text-base">
+                    <span>🎟️ Mã giảm giá ({appliedDiscount.code}):</span>
+                    <span className="font-semibold">-{formatPrice(discountAmount)}</span>
+                  </div>
+                )}
+                
                 <div className="flex justify-between text-sm sm:text-base">
                   <span>Phí vận chuyển:</span>
                   <span className={`font-semibold ${shippingFee === 0 ? "text-green-600" : ""}`}>
@@ -311,15 +388,66 @@ export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPa
                 </div>
                 
                 <div className="space-y-2 sm:space-y-3">
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Mã giảm giá"
-                      value={promoCode}
-                      onChange={(e) => setPromoCode(e.target.value)}
-                      className="text-sm"
-                    />
-                    <Button variant="outline" className="text-sm whitespace-nowrap">Áp dụng</Button>
-                  </div>
+                  {appliedDiscount ? (
+                    <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-700">
+                          ✓ Đã áp dụng: {appliedDiscount.name}
+                        </p>
+                        <p className="text-xs text-green-600">
+                          Giảm {formatPrice(discountAmount)}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveDiscount}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        Xóa
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Mã giảm giá"
+                          value={promoCode}
+                          onChange={(e) => {
+                            setPromoCode(e.target.value);
+                            setDiscountError("");
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleApplyDiscount();
+                            }
+                          }}
+                          disabled={isApplyingDiscount}
+                          className="text-sm"
+                        />
+                        <Button 
+                          variant="outline" 
+                          className="text-sm whitespace-nowrap"
+                          onClick={handleApplyDiscount}
+                          disabled={isApplyingDiscount || !promoCode.trim()}
+                        >
+                          {isApplyingDiscount ? (
+                            <>
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              Đang kiểm tra...
+                            </>
+                          ) : (
+                            'Áp dụng'
+                          )}
+                        </Button>
+                      </div>
+                      {discountError && (
+                        <Alert variant="destructive" className="py-2">
+                          <AlertDescription className="text-xs">{discountError}</AlertDescription>
+                        </Alert>
+                      )}
+                    </>
+                  )}
                   
           <Button 
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-sm sm:text-base py-5 sm:py-6 shadow-lg hover:shadow-xl transition-all" 

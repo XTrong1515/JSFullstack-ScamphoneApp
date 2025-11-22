@@ -50,6 +50,18 @@ const getProductReviews = asyncHandler(async (req, res) => {
 const createReview = asyncHandler(async (req, res) => {
   const { product, rating, comment } = req.body;
 
+  // Check if user has purchased this product (delivered order)
+  const hasOrder = await Order.findOne({
+    user: req.user._id,
+    'orderItems.product': product,
+    status: 'delivered'
+  });
+
+  if (!hasOrder) {
+    res.status(403);
+    throw new Error('Bạn cần mua và nhận sản phẩm này trước khi đánh giá');
+  }
+
   // Check if user already reviewed this product
   const existingReview = await Review.findOne({
     user: req.user._id,
@@ -70,13 +82,6 @@ const createReview = asyncHandler(async (req, res) => {
 
   const populatedReview = await Review.findById(review._id).populate('user', 'name avatar');
 
-  // Check verified purchase
-  const hasOrder = await Order.findOne({
-    user: req.user._id,
-    'orderItems.product': product,
-    status: 'delivered'
-  });
-
   res.status(201).json({
     _id: populatedReview._id,
     user: {
@@ -88,7 +93,7 @@ const createReview = asyncHandler(async (req, res) => {
     rating: populatedReview.rating,
     comment: populatedReview.comment,
     createdAt: populatedReview.createdAt,
-    isVerifiedPurchase: !!hasOrder
+    isVerifiedPurchase: true // Always true since we validate above
   });
 });
 

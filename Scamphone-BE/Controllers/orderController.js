@@ -97,16 +97,26 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
 
   const updatedOrder = await order.save();
   
+  // Tạo thông tin sản phẩm cho notification
+  const productDetails = order.orderItems.map(item => {
+    let detail = item.name;
+    if (item.variantAttributes && Object.keys(item.variantAttributes).length > 0) {
+      const variantStr = Object.values(item.variantAttributes).join(', ');
+      detail += ` (${variantStr})`;
+    }
+    return `${detail} x${item.quantity}`;
+  }).join(', ');
+  
   // Tạo thông báo cho user
   let notificationTitle = 'Cập nhật đơn hàng';
   let notificationMessage = `Đơn hàng #${order._id.toString().slice(-8)} của bạn đã được cập nhật trạng thái: ${status}`;
   
   if (status === 'delivered') {
     notificationTitle = 'Đơn hàng đã giao thành công';
-    notificationMessage = `Đơn hàng #${order._id.toString().slice(-8)} đã được giao thành công. Cảm ơn bạn đã mua hàng!`;
+    notificationMessage = `Đơn hàng #${order._id.toString().slice(-8)} đã được giao thành công. Sản phẩm: ${productDetails}. Cảm ơn bạn đã mua hàng!`;
   } else if (status === 'shipping') {
     notificationTitle = 'Đơn hàng đang được giao';
-    notificationMessage = `Đơn hàng #${order._id.toString().slice(-8)} đang trên đường giao đến bạn.`;
+    notificationMessage = `Đơn hàng #${order._id.toString().slice(-8)} đang trên đường giao đến bạn. Sản phẩm: ${productDetails}.`;
   }
 
   await createNotification(order.user, {
@@ -215,6 +225,9 @@ const confirmOrder = asyncHandler(async (req, res) => {
 
         if (variantIndex >= 0) {
           product.variants[variantIndex].stock -= item.quantity;
+          
+          // Tính lại tổng stock_quantity từ tất cả variants
+          product.stock_quantity = product.variants.reduce((total, v) => total + (v.stock || 0), 0);
         }
       } 
       // Nếu không có variant, trừ stock_quantity của sản phẩm cha
@@ -229,11 +242,21 @@ const confirmOrder = asyncHandler(async (req, res) => {
   order.status = 'processing';
   const updatedOrder = await order.save();
 
+  // Tạo thông tin sản phẩm cho notification
+  const productDetails = order.orderItems.map(item => {
+    let detail = item.name;
+    if (item.variantAttributes && Object.keys(item.variantAttributes).length > 0) {
+      const variantStr = Object.values(item.variantAttributes).join(', ');
+      detail += ` (${variantStr})`;
+    }
+    return `${detail} x${item.quantity}`;
+  }).join(', ');
+
   // Tạo thông báo cho user
   await createNotification(order.user, {
     type: 'order_confirmed',
     title: 'Đơn hàng đã được xác nhận',
-    message: `Đơn hàng #${order._id.toString().slice(-8)} của bạn đã được xác nhận và đang được chuẩn bị. Tổng tiền: ${order.totalPrice.toLocaleString()}₫`,
+    message: `Đơn hàng #${order._id.toString().slice(-8)} của bạn đã được xác nhận và đang được chuẩn bị. Sản phẩm: ${productDetails}. Tổng tiền: ${order.totalPrice.toLocaleString()}₫`,
     order: order._id
   });
 
@@ -266,11 +289,21 @@ const rejectOrder = asyncHandler(async (req, res) => {
   order.rejectionReason = reason;
   const updatedOrder = await order.save();
 
+  // Tạo thông tin sản phẩm cho notification
+  const productDetails = order.orderItems.map(item => {
+    let detail = item.name;
+    if (item.variantAttributes && Object.keys(item.variantAttributes).length > 0) {
+      const variantStr = Object.values(item.variantAttributes).join(', ');
+      detail += ` (${variantStr})`;
+    }
+    return `${detail} x${item.quantity}`;
+  }).join(', ');
+
   // Tạo thông báo cho user
   await createNotification(order.user, {
     type: 'order_rejected',
     title: 'Đơn hàng đã bị từ chối',
-    message: `Đơn hàng #${order._id.toString().slice(-8)} của bạn đã bị từ chối. Lý do: ${reason}`,
+    message: `Đơn hàng #${order._id.toString().slice(-8)} của bạn đã bị từ chối. Sản phẩm: ${productDetails}. Lý do: ${reason}`,
     order: order._id,
     metadata: { rejectionReason: reason }
   });
@@ -338,6 +371,9 @@ const cancelOrder = asyncHandler(async (req, res) => {
 
           if (variantIndex >= 0) {
             product.variants[variantIndex].stock += item.quantity;
+            
+            // Tính lại tổng stock_quantity từ tất cả variants
+            product.stock_quantity = product.variants.reduce((total, v) => total + (v.stock || 0), 0);
           }
         } 
         // Nếu không có variant, hoàn trả stock_quantity của sản phẩm cha

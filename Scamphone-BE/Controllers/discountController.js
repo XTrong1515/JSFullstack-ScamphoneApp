@@ -1,5 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import Discount from '../Models/DiscountModel.js';
+import User from '../Models/UserModel.js';
+import Notification from '../Models/NotificationModel.js';
 
 // @desc    Get all discounts (public - only active ones)
 // @route   GET /api/v1/discounts
@@ -149,6 +151,31 @@ const createDiscount = asyncHandler(async (req, res) => {
     applicableCategories: applicableCategories || [],
     status: 'active'
   });
+
+  // Tự động gửi thông báo cho tất cả người dùng
+  try {
+    const users = await User.find({}, '_id');
+    
+    const discountInfo = type === 'percentage' 
+      ? `${value}%` 
+      : `${value.toLocaleString()}đ`;
+    
+    const endDateStr = new Date(endDate).toLocaleDateString('vi-VN');
+    
+    const notifications = users.map(user => ({
+      user: user._id,
+      type: 'promotion',
+      title: `🎁 Khuyến mãi mới: ${name}`,
+      message: `Nhập mã ${code.toUpperCase()} để được giảm ${discountInfo}${minOrderValue ? ` cho đơn hàng từ ${minOrderValue.toLocaleString()}đ` : ''}. HSD: ${endDateStr}`,
+      isRead: false
+    }));
+
+    // Chèn hàng loạt (tối ưu hiệu năng)
+    await Notification.insertMany(notifications);
+  } catch (notifError) {
+    // Không làm gián đoạn việc tạo discount nếu gửi thông báo lỗi
+    console.error('Error sending promotion notifications:', notifError);
+  }
 
   res.status(201).json(discount);
 });

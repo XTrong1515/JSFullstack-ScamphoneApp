@@ -9,6 +9,7 @@ import { Switch } from '../ui/switch';
 import { Loader2, Camera, Check } from 'lucide-react';
 import { profileService, UserProfile } from '../../services/profileService';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { AddressManagement } from '../AddressManagement';
 
 interface ProfilePageProps {
   onPageChange: (page: string) => void;
@@ -35,6 +36,13 @@ export function ProfilePage({ onPageChange, onUpdateProfile }: ProfilePageProps)
   const loadProfile = async () => {
     try {
       const data = await profileService.getProfile();
+      // Ensure preferences exists with default values
+      if (!data.preferences) {
+        data.preferences = {
+          notifications: true,
+          newsletter: false
+        };
+      }
       setProfile(data);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Không thể tải thông tin người dùng');
@@ -149,12 +157,29 @@ export function ProfilePage({ onPageChange, onUpdateProfile }: ProfilePageProps)
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-8">Thông tin tài khoản</h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Header with back button */}
+        <div className="mb-8">
+          <Button
+            variant="outline"
+            onClick={() => onPageChange('home')}
+            className="mb-4 flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m15 18-6-6 6-6"/>
+            </svg>
+            Quay lại
+          </Button>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Thông tin tài khoản
+          </h1>
+        </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList>
           <TabsTrigger value="profile">Thông tin cá nhân</TabsTrigger>
+          <TabsTrigger value="addresses">Địa chỉ</TabsTrigger>
           <TabsTrigger value="security">Bảo mật</TabsTrigger>
           <TabsTrigger value="preferences">Tùy chọn</TabsTrigger>
         </TabsList>
@@ -172,7 +197,7 @@ export function ProfilePage({ onPageChange, onUpdateProfile }: ProfilePageProps)
                   />
                   <label
                     htmlFor="avatar-upload"
-                    className="absolute bottom-0 right-0 bg-blue-600 text-white p-1.5 rounded-full cursor-pointer hover:bg-blue-700"
+                    className="absolute bottom-0 right-0 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-1.5 rounded-full cursor-pointer hover:opacity-90 transition-opacity shadow-lg"
                   >
                     <Camera className="w-4 h-4" />
                   </label>
@@ -236,7 +261,7 @@ export function ProfilePage({ onPageChange, onUpdateProfile }: ProfilePageProps)
                 </Alert>
               )}
 
-              <Button type="submit" disabled={isSaving}>
+              <Button type="submit" disabled={isSaving} className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -247,6 +272,12 @@ export function ProfilePage({ onPageChange, onUpdateProfile }: ProfilePageProps)
                 )}
               </Button>
             </form>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="addresses">
+          <Card className="p-6">
+            <AddressManagement />
           </Card>
         </TabsContent>
 
@@ -297,7 +328,7 @@ export function ProfilePage({ onPageChange, onUpdateProfile }: ProfilePageProps)
                 />
               </div>
 
-              <Button type="submit" disabled={isSaving}>
+              <Button type="submit" disabled={isSaving} className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -322,7 +353,7 @@ export function ProfilePage({ onPageChange, onUpdateProfile }: ProfilePageProps)
                   </p>
                 </div>
                 <Switch
-                  checked={profile.preferences.notifications}
+                  checked={profile?.preferences?.notifications ?? true}
                   onCheckedChange={(checked: boolean) => 
                     handlePreferencesChange('notifications', checked)
                   }
@@ -337,7 +368,7 @@ export function ProfilePage({ onPageChange, onUpdateProfile }: ProfilePageProps)
                   </p>
                 </div>
                 <Switch
-                  checked={profile.preferences.newsletter}
+                  checked={profile?.preferences?.newsletter ?? false}
                   onCheckedChange={(checked: boolean) => 
                     handlePreferencesChange('newsletter', checked)
                   }
@@ -347,6 +378,7 @@ export function ProfilePage({ onPageChange, onUpdateProfile }: ProfilePageProps)
           </Card>
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

@@ -15,6 +15,8 @@ import passwordResetRoutes from './Routes/passwordResetRoutes.js';
 import discountRoutes from './Routes/discountRoutes.js';
 import notificationRoutes from './Routes/notificationRoutes.js';
 import reviewRoutes from './Routes/reviewRoutes.js';
+import paymentRoutes from './Routes/paymentRoutes.js';
+import addressRoutes from './Routes/addressRoutes.js';
 import { notFound, errorHandler } from './Middleware/errorMiddleware.js';
 
 dotenv.config();
@@ -114,6 +116,8 @@ app.use('/api/v1/password', passwordResetRoutes);
 app.use('/api/v1/discounts', discountRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/reviews', reviewRoutes);
+app.use('/api/v1/payment', paymentRoutes);
+app.use('/api/v1/addresses', addressRoutes);
 
 // Middleware xử lý lỗi
 app.use(notFound);

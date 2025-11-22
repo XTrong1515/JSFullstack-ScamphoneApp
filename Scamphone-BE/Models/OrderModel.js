@@ -40,6 +40,7 @@ const orderSchema = new mongoose.Schema({
     cancelledAt: { type: Date },
     isPaid: { type: Boolean, default: false },
     paidAt: { type: Date },
+    paymentTransactionId: { type: String }, // VNPay transaction ID
     isDelivered: { type: Boolean, default: false },
     deliveredAt: { type: Date }
 }, { timestamps: true });

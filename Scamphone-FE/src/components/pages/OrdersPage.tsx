@@ -23,11 +23,13 @@ import { orderService } from "../../services/orderService";
 interface Order {
   _id: string;
   orderItems: Array<{
-    product: any;
+    product?: any;
     name: string;
     quantity: number;
     price: number;
     image?: string;
+    sku?: string;
+    variantAttributes?: { [key: string]: string };
   }>;
   shippingAddress: {
     fullName: string;
@@ -269,6 +271,11 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
                               )}
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-gray-900 truncate">{item.name}</p>
+                                {item.variantAttributes && Object.keys(item.variantAttributes).length > 0 && (
+                                  <p className="text-xs text-gray-600 mt-1">
+                                    📦 {Object.entries(item.variantAttributes).map(([key, value]) => value).join(', ')}
+                                  </p>
+                                )}
                                 <p className="text-sm text-gray-600 mt-1">Số lượng: x{item.quantity}</p>
                                 <p className="text-sm font-medium text-blue-600 mt-1">
                                   ₫{item.price.toLocaleString()} / sản phẩm
@@ -439,6 +446,11 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
                       )}
                       <div className="flex-1">
                         <p className="font-medium">{item.name}</p>
+                        {item.variantAttributes && Object.keys(item.variantAttributes).length > 0 && (
+                          <p className="text-xs text-gray-600 mt-1">
+                            📦 Phân loại: {Object.entries(item.variantAttributes).map(([key, value]) => value).join(', ')}
+                          </p>
+                        )}
                         <p className="text-sm text-gray-600">Số lượng: x{item.quantity}</p>
                         <p className="text-sm text-blue-600 font-medium">₫{item.price.toLocaleString()}</p>
                       </div>

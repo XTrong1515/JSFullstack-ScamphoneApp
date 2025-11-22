@@ -1,16 +1,27 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+const addressSchema = new mongoose.Schema({
+    fullName: { type: String, required: true },
+    phone: { type: String, required: true },
+    address: { type: String, required: true }, // Số nhà, tên đường
+    ward: { type: String, required: true }, // Phường/Xã
+    district: { type: String, required: true }, // Quận/Huyện
+    city: { type: String, required: true }, // Tỉnh/Thành phố
+    isDefault: { type: Boolean, default: false }
+}, { _id: true });
+
 const userSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     phone: { type: String },
-    address: { type: String },
+    address: { type: String }, // Kept for backward compatibility
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     loyaltyPoints: { type: Number, default: 0 },
     resetPasswordToken: String,
-    resetPasswordExpires: Date
+    resetPasswordExpires: Date,
+    addresses: [addressSchema] // Sổ địa chỉ
 }, { timestamps: true });
 
 // Hash password before saving

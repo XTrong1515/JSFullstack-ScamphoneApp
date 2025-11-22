@@ -22,6 +22,7 @@ import { ForgotPasswordForm } from "./components/ForgotPasswordForm";
 import { ResetPasswordPage } from "./components/pages/ResetPasswordPage";
 import { CheckoutPage } from "./components/pages/CheckoutPage";
 import { PaymentPage } from "./components/pages/PaymentPage";
+import { PaymentResultPage } from "./components/pages/PaymentResultPage";
 import { OrderSuccessPage } from "./components/pages/OrderSuccessPage";
 import { NotificationCenter } from "./components/NotificationCenter";
 import { userService } from "./services/userService";
@@ -77,6 +78,14 @@ export default function App() {
   const [showCartDropdown, setShowCartDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Detect VNPay return URL on app mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('vnp_ResponseCode')) {
+      setCurrentPage('payment-return');
+    }
+  }, []);
 
   // Load user from token on app mount
   useEffect(() => {
@@ -327,6 +336,8 @@ export default function App() {
         return <CheckoutPage onPageChange={handlePageChange} cartItems={cartItems} user={user} />;
       case 'payment':
         return <PaymentPage onPageChange={handlePageChange} checkoutData={checkoutData} />;
+      case 'payment-result':
+        return <PaymentResultPage onPageChange={setCurrentPage} />;
       case 'order-success':
         return <OrderSuccessPage onPageChange={setCurrentPage} orderData={orderData} />;
       case 'search':

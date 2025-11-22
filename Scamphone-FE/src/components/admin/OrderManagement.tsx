@@ -25,6 +25,8 @@ interface Order {
     quantity: number;
     price: number;
     image?: string;
+    sku?: string;
+    variantAttributes?: { [key: string]: string };
   }>;
   shippingAddress: {
     fullName: string;
@@ -367,6 +369,11 @@ export function OrderManagement() {
                     >
                       <div>
                         <p className="font-medium">{item.name}</p>
+                        {item.variantAttributes && Object.keys(item.variantAttributes).length > 0 && (
+                          <p className="text-xs text-gray-600 mt-1">
+                            📦 Phân loại: {Object.entries(item.variantAttributes).map(([key, value]) => value).join(', ')}
+                          </p>
+                        )}
                         <p className="text-sm text-gray-500">
                           Số lượng: {item.quantity} x ₫{item.price.toLocaleString()}
                         </p>

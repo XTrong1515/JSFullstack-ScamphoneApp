@@ -15,6 +15,7 @@ import {
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { orderService } from "../../services/orderService";
+import { paymentService } from "../../services/paymentService";
 
 interface PaymentPageProps {
   onPageChange: (page: string, data?: any) => void;
@@ -59,21 +60,40 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
       setLoading(true);
 
       if (selectedMethod === 'VNPay') {
-        // Show QR code for VNPay
-        setShowQR(true);
-        // Simulate payment verification (in real app, use VNPay API)
-        setTimeout(async () => {
-          await createOrder();
-        }, 3000);
+        // Create order first
+        const order = await createOrder();
+        
+        // Create VNPay payment URL
+        try {
+          const paymentData = await paymentService.createVNPayPayment({
+            orderId: order._id,
+            amount: totalPrice,
+            orderInfo: `Thanh toan don hang ${order._id}`,
+            ipAddr: '127.0.0.1' // In production, get real IP
+          });
+
+          // Redirect to VNPay payment gateway
+          window.location.href = paymentData.paymentUrl;
+        } catch (paymentError) {
+          console.error('VNPay payment error:', paymentError);
+          // If payment URL creation fails, show error but order is still created
+          alert('Không thể tạo link thanh toán VNPay. Vui lòng chọn phương thức khác.');
+          setLoading(false);
+        }
       } else {
         // COD - Create order immediately
         await createOrder();
+        
+        // Clear cart and redirect
+        localStorage.removeItem('cart');
+        localStorage.removeItem('shippingInfo');
+        setLoading(false);
+        onPageChange('order-success', { orderId: 'success' });
       }
     } catch (error: any) {
       console.error('Error placing order:', error);
       alert(error?.response?.data?.message || 'Có lỗi xảy ra khi đặt hàng!');
       setLoading(false);
-      setShowQR(false);
     }
   };
 
@@ -98,17 +118,7 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
     };
 
     const order = await orderService.createOrder(orderData);
-    
-    // Clear cart
-    localStorage.removeItem('cart');
-    localStorage.removeItem('shippingInfo');
-    
-    // Show success and redirect
-    setLoading(false);
-    setShowQR(false);
-    
-    // Navigate to success page
-    onPageChange('order-success', { orderId: order._id });
+    return order;
   };
 
   if (showQR) {

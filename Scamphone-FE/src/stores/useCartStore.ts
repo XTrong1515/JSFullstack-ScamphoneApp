@@ -21,6 +21,13 @@ export interface CartItem {
 interface CartStore {
   cartItems: CartItem[];
   userId: string | null;
+  appliedDiscount: {
+    code: string;
+    name: string;
+    discountAmount: number;
+    type: string;
+    value: number;
+  } | null;
   
   // Actions
   setUserId: (userId: string | null) => void;
@@ -28,6 +35,8 @@ interface CartStore {
   updateQuantity: (itemId: string, quantity: number) => void;
   removeItem: (itemId: string) => void;
   clearCart: () => void;
+  setDiscount: (discount: any) => void;
+  removeDiscount: () => void;
   getTotalItems: () => number;
   getTotalPrice: () => number;
 }
@@ -37,12 +46,13 @@ export const useCartStore = create<CartStore>()(
     (set, get) => ({
       cartItems: [],
       userId: null,
+      appliedDiscount: null,
 
       setUserId: (userId) => {
         const currentUserId = get().userId;
         if (currentUserId !== userId) {
           // User changed, clear cart
-          set({ userId, cartItems: [] });
+          set({ userId, cartItems: [], appliedDiscount: null });
         }
       },
 
@@ -105,7 +115,15 @@ export const useCartStore = create<CartStore>()(
       },
 
       clearCart: () => {
-        set({ cartItems: [] });
+        set({ cartItems: [], appliedDiscount: null });
+      },
+
+      setDiscount: (discount) => {
+        set({ appliedDiscount: discount });
+      },
+
+      removeDiscount: () => {
+        set({ appliedDiscount: null });
       },
 
       getTotalItems: () => {
