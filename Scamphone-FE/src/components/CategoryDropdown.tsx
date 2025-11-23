@@ -3,16 +3,7 @@ import { Button } from "./ui/button";
 import { ChevronDown, Smartphone, Laptop, Tablet, Headphones, Home, Tv, Refrigerator, Package, Loader2 } from "lucide-react";
 import { categoryService, Category as BackendCategory } from "../services/categoryService";
 
-interface Category {
-  id: string;
-  name: string;
-  icon: React.ElementType;
-  subcategories: {
-    id: string;
-    name: string;
-    items: string[];
-  }[];
-}
+// Removed unused local Category interface - using BackendCategory from service
 
 interface CategoryDropdownProps {
   isOpen: boolean;

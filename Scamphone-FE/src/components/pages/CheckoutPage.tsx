@@ -362,7 +362,7 @@ export function CheckoutPage({ onPageChange, cartItems: initialCartItems, user }
               </h2>
               <div className="space-y-3">
                 {cartItems.map((item) => (
-                  <div key={item._id} className="flex gap-4 p-3 bg-gray-50 rounded-lg">
+                  <div key={item._id || item.id} className="flex gap-4 p-3 bg-gray-50 rounded-lg">
                     {item.image && (
                       <img
                         src={item.image}

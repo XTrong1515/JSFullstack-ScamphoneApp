@@ -8,7 +8,8 @@ import {
   updateOrderStatus,
   confirmOrder,
   rejectOrder,
-  cancelOrder
+  cancelOrder,
+  assignDeliveryPerson
 } from '../Controllers/orderController.js';
 import { protect, admin } from '../Middleware/authMiddleware.js';
 
@@ -22,6 +23,7 @@ router.get('/', protect, admin, getAllOrders);
 router.put('/:id/status', protect, admin, updateOrderStatus);
 router.put('/:id/confirm', protect, admin, confirmOrder);
 router.put('/:id/reject', protect, admin, rejectOrder);
+router.put('/:id/assign-delivery', protect, admin, assignDeliveryPerson);
 
 // Get order by ID - Đặt CUỐI CÙNG
 router.get('/:id', protect, getOrderById);

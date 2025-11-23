@@ -58,11 +58,14 @@ export function UserManagement() {
     if (!confirm('Bạn có chắc chắn muốn thăng cấp người dùng này lên Admin?')) return;
     
     try {
-      await adminService.promoteToAdmin(userId);
+      console.log('[PROMOTE] Promoting user:', userId);
+      const result = await adminService.promoteToAdmin(userId);
+      console.log('[PROMOTE] Success:', result);
       alert('Đã thăng cấp người dùng thành Admin!');
       loadUsers();
     } catch (error: any) {
-      console.error('Error promoting user:', error);
+      console.error('[PROMOTE] Error:', error);
+      console.error('[PROMOTE] Response:', error?.response);
       alert(error?.response?.data?.message || 'Có lỗi xảy ra khi thăng cấp!');
     }
   };

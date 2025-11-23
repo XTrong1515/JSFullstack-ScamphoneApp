@@ -1,9 +1,16 @@
 import { useState, useEffect } from "react";
-import { Search, AlertTriangle, Package, Loader2, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { Search, AlertTriangle, Package, Loader2, RefreshCw, Eye, EyeOff, Filter } from "lucide-react";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { productService, Product } from "../../services/productService";
 
 interface InventoryItem {
@@ -26,6 +33,8 @@ export function InventoryManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [updatingProductId, setUpdatingProductId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [variantFilter, setVariantFilter] = useState<string>('all'); // 'all', 'main', or specific variant
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadProducts();
@@ -52,6 +61,28 @@ export function InventoryManagement() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleProductExpansion = (productId: string) => {
+    setExpandedProducts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(productId)) {
+        newSet.delete(productId);
+      } else {
+        newSet.add(productId);
+      }
+      return newSet;
+    });
+  };
+
+  const expandAllProducts = () => {
+    setExpandedProducts(new Set(filteredInventory.filter(item => 
+      item.product.variants && item.product.variants.length > 0
+    ).map(item => item.id)));
+  };
+
+  const collapseAllProducts = () => {
+    setExpandedProducts(new Set());
   };
 
   const handleToggleProductStatus = async (productId: string, currentStatus: string) => {
@@ -243,34 +274,61 @@ export function InventoryManagement() {
           </div>
           
           {/* Filter Buttons */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <span className="text-xs md:text-sm text-gray-600 font-medium">Lọc theo trạng thái:</span>
-            <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Status Filter */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <span className="text-xs md:text-sm text-gray-600 font-medium">Trạng thái:</span>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={statusFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('all')}
+                  className="flex-1 sm:flex-none text-xs md:text-sm"
+                >
+                  Tất cả ({inventory.length})
+                </Button>
+                <Button
+                  variant={statusFilter === 'active' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('active')}
+                  className="flex-1 sm:flex-none text-xs md:text-sm"
+                >
+                  <Eye className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                  Hiển thị ({inventory.filter(i => i.status === 'active').length})
+                </Button>
+                <Button
+                  variant={statusFilter === 'inactive' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('inactive')}
+                  className="flex-1 sm:flex-none text-xs md:text-sm"
+                >
+                  <EyeOff className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                  Đã ẩn ({hiddenItems.length})
+                </Button>
+              </div>
+            </div>
+
+            {/* Variant Expand/Collapse Controls */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs md:text-sm text-gray-600 font-medium">
+                <Filter className="w-4 h-4 inline mr-1" />
+                Biến thể:
+              </span>
               <Button
-                variant={statusFilter === 'all' ? 'default' : 'outline'}
+                variant="outline"
                 size="sm"
-                onClick={() => setStatusFilter('all')}
-                className="flex-1 sm:flex-none text-xs md:text-sm"
+                onClick={expandAllProducts}
+                className="text-xs md:text-sm"
               >
-                Tất cả ({inventory.length})
+                Mở tất cả
               </Button>
               <Button
-                variant={statusFilter === 'active' ? 'default' : 'outline'}
+                variant="outline"
                 size="sm"
-                onClick={() => setStatusFilter('active')}
-                className="flex-1 sm:flex-none text-xs md:text-sm"
+                onClick={collapseAllProducts}
+                className="text-xs md:text-sm"
               >
-                <Eye className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                Hiển thị ({inventory.filter(i => i.status === 'active').length})
-              </Button>
-              <Button
-                variant={statusFilter === 'inactive' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setStatusFilter('inactive')}
-                className="flex-1 sm:flex-none text-xs md:text-sm"
-              >
-                <EyeOff className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                Đã ẩn ({hiddenItems.length})
+                Đóng tất cả
               </Button>
             </div>
           </div>
@@ -283,9 +341,11 @@ export function InventoryManagement() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-gray-50">
+                <th className="text-left py-3 px-3 font-semibold text-gray-700 w-10"></th>
                 <th className="text-left py-3 px-3 font-semibold text-gray-700">SKU</th>
                 <th className="text-left py-3 px-3 font-semibold text-gray-700">Tên sản phẩm</th>
                 <th className="text-left py-3 px-3 font-semibold text-gray-700">Danh mục</th>
+                <th className="text-left py-3 px-3 font-semibold text-gray-700">Biến thể</th>
                 <th className="text-left py-3 px-3 font-semibold text-gray-700">Tồn kho</th>
                 <th className="text-left py-3 px-3 font-semibold text-gray-700">Trạng thái</th>
                 <th className="text-left py-3 px-3 font-semibold text-gray-700">Giá trị</th>
@@ -297,77 +357,161 @@ export function InventoryManagement() {
               {filteredInventory.map((item) => {
                 const isLowStock = item.stock < item.minStock;
                 const isUpdating = updatingProductId === item.id;
+                const hasVariants = item.product.variants && item.product.variants.length > 0;
+                const isExpanded = expandedProducts.has(item.id);
                 
                 return (
-                  <tr key={item.id} className="border-b hover:bg-gray-50 transition-colors">
-                    <td className="py-3 px-3 font-mono text-xs">{item.sku}</td>
-                    <td className="py-3 px-3 font-medium">{item.name}</td>
-                    <td className="py-3 px-3">{item.category}</td>
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`font-semibold ${
-                            isLowStock ? "text-red-600" : "text-green-600"
+                  <>
+                    {/* Main Product Row */}
+                    <tr key={item.id} className="border-b hover:bg-gray-50 transition-colors">
+                      <td className="py-3 px-3">
+                        {hasVariants && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleProductExpansion(item.id)}
+                            className="h-6 w-6 p-0"
+                          >
+                            {isExpanded ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="m18 15-6-6-6 6"/>
+                              </svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="m6 9 6 6 6-6"/>
+                              </svg>
+                            )}
+                          </Button>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-xs">{item.sku}</td>
+                      <td className="py-3 px-3 font-medium">{item.name}</td>
+                      <td className="py-3 px-3">{item.category}</td>
+                      <td className="py-3 px-3">
+                        {hasVariants ? (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 text-xs cursor-pointer" onClick={() => toggleProductExpansion(item.id)}>
+                            {item.product.variants.length} biến thể
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-gray-500">Không có</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-semibold ${
+                              isLowStock ? "text-red-600" : "text-green-600"
+                            }`}
+                          >
+                            {item.stock}
+                          </span>
+                          {isLowStock && (
+                            <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          Min: {item.minStock}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3">
+                        <Badge 
+                          variant={item.status === 'active' ? 'default' : 'secondary'}
+                          className={
+                            item.status === 'active' 
+                              ? 'bg-green-100 text-green-800 border-green-200' 
+                              : 'bg-gray-100 text-gray-800 border-gray-200'
+                          }
+                        >
+                          {item.status === 'active' ? 'Hiển thị' : 'Đã ẩn'}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-3 font-medium text-gray-900">
+                        ₫{((item.stock * item.price) / 1000000).toFixed(1)}M
+                      </td>
+                      <td className="py-3 px-3 text-xs text-gray-500">
+                        {item.lastUpdated}
+                      </td>
+                      <td className="py-3 px-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleProductStatus(item.id, item.status)}
+                          disabled={isUpdating}
+                          className={`transition-all ${
+                            isLowStock && item.status === 'active'
+                              ? 'border-yellow-400 text-yellow-700 hover:bg-yellow-50'
+                              : item.status === 'inactive'
+                              ? 'border-green-500 text-green-700 hover:bg-green-50'
+                              : 'hover:bg-gray-50'
                           }`}
                         >
-                          {item.stock}
-                        </span>
-                        {isLowStock && (
-                          <AlertTriangle className="w-4 h-4 text-yellow-600" />
-                        )}
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        Min: {item.minStock}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <Badge 
-                        variant={item.status === 'active' ? 'default' : 'secondary'}
-                        className={
-                          item.status === 'active' 
-                            ? 'bg-green-100 text-green-800 border-green-200' 
-                            : 'bg-gray-100 text-gray-800 border-gray-200'
-                        }
-                      >
-                        {item.status === 'active' ? 'Hiển thị' : 'Đã ẩn'}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-3 font-medium text-gray-900">
-                      ₫{((item.stock * item.price) / 1000000).toFixed(1)}M
-                    </td>
-                    <td className="py-3 px-3 text-xs text-gray-500">
-                      {item.lastUpdated}
-                    </td>
-                    <td className="py-3 px-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleToggleProductStatus(item.id, item.status)}
-                        disabled={isUpdating}
-                        className={`transition-all ${
-                          isLowStock && item.status === 'active'
-                            ? 'border-yellow-400 text-yellow-700 hover:bg-yellow-50'
-                            : item.status === 'inactive'
-                            ? 'border-green-500 text-green-700 hover:bg-green-50'
-                            : 'hover:bg-gray-50'
-                        }`}
-                      >
-                        {isUpdating ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : item.status === 'active' ? (
-                          <>
-                            <EyeOff className="w-3 h-3 mr-1" />
-                            <span className="text-xs">Ẩn</span>
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="w-3 h-3 mr-1" />
-                            <span className="text-xs">Hiện</span>
-                          </>
-                        )}
-                      </Button>
-                    </td>
-                  </tr>
+                          {isUpdating ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : item.status === 'active' ? (
+                            <>
+                              <EyeOff className="w-3 h-3 mr-1" />
+                              <span className="text-xs">Ẩn</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3 h-3 mr-1" />
+                              <span className="text-xs">Hiện</span>
+                            </>
+                          )}
+                        </Button>
+                      </td>
+                    </tr>
+
+                    {/* Variant Rows */}
+                    {isExpanded && hasVariants && item.product.variants.map((variant, vIndex) => {
+                      const variantAttrs = variant.attributes instanceof Map 
+                        ? Object.fromEntries(variant.attributes)
+                        : variant.attributes;
+                      const variantLabel = variantAttrs 
+                        ? Object.values(variantAttrs).join(' - ') 
+                        : `Variant ${vIndex + 1}`;
+                      const variantLowStock = variant.stock < 10;
+
+                      return (
+                        <tr key={`${item.id}-variant-${vIndex}`} className="border-b bg-blue-50/30 hover:bg-blue-100/50 transition-colors">
+                          <td className="py-2 px-3"></td>
+                          <td className="py-2 px-3 pl-8 font-mono text-xs text-gray-600">{variant.sku || '-'}</td>
+                          <td className="py-2 px-3 text-sm text-gray-700 pl-8">
+                            <span className="text-xs text-gray-500">↳ </span>
+                            {variantLabel}
+                          </td>
+                          <td className="py-2 px-3 text-xs text-gray-500">-</td>
+                          <td className="py-2 px-3">
+                            <div className="flex flex-col gap-1">
+                              {variantAttrs && Object.entries(variantAttrs).map(([key, value]) => (
+                                <Badge key={`${item.id}-${vIndex}-${key}`} variant="outline" className="text-xs bg-white">
+                                  {key}: {value}
+                                </Badge>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="py-2 px-3">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-semibold text-sm ${variantLowStock ? "text-red-600" : "text-green-600"}`}>
+                                {variant.stock}
+                              </span>
+                              {variantLowStock && <AlertTriangle className="w-3 h-3 text-yellow-600" />}
+                            </div>
+                          </td>
+                          <td className="py-2 px-3">
+                            <Badge variant="outline" className="text-xs">
+                              Variant
+                            </Badge>
+                          </td>
+                          <td className="py-2 px-3 text-sm text-gray-700">
+                            ₫{((variant.stock * variant.price) / 1000000).toFixed(1)}M
+                          </td>
+                          <td className="py-2 px-3 text-xs text-gray-500">-</td>
+                          <td className="py-2 px-3 text-xs text-gray-400">-</td>
+                        </tr>
+                      );
+                    })}
+                  </>
                 );
               })}
             </tbody>

@@ -14,6 +14,8 @@ import { orderService } from "../../services/orderService";
 
 interface Order {
   _id: string;
+  orderNumber?: number;
+  formattedOrderNumber?: string;
   user: {
     _id: string;
     name: string;
@@ -34,6 +36,18 @@ interface Order {
     address: string;
     city?: string;
     district?: string;
+  };
+  deliveryPerson?: {
+    name: string;
+    phone: string;
+    vehicleNumber?: string;
+    assignedAt?: string;
+  };
+  shippingDetails?: {
+    driverName: string;
+    driverPhone: string;
+    vehicleNumber?: string;
+    shippedAt?: string;
   };
   paymentMethod: string;
   totalPrice: number;
@@ -59,6 +73,14 @@ export function OrderManagement() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [deliveryOrder, setDeliveryOrder] = useState<Order | null>(null); // State riêng cho delivery modal
+  const [hideDetailModal, setHideDetailModal] = useState(false); // Ẩn modal detail khi mở delivery modal
+  const [deliveryPerson, setDeliveryPerson] = useState({
+    name: "",
+    phone: "",
+    vehicleNumber: ""
+  });
 
   useEffect(() => {
     loadOrders();
@@ -136,6 +158,99 @@ export function OrderManagement() {
     }
   };
 
+  const handleOpenDeliveryModal = (order: Order) => {
+    setSelectedOrder(order);
+    // Pre-fill form nếu đã có thông tin tài xế
+    if (order.shippingDetails) {
+      setDeliveryPerson({
+        name: order.shippingDetails.driverName || "",
+        phone: order.shippingDetails.driverPhone || "",
+        vehicleNumber: order.shippingDetails.vehicleNumber || ""
+      });
+    } else if (order.deliveryPerson) {
+      setDeliveryPerson({
+        name: order.deliveryPerson.name || "",
+        phone: order.deliveryPerson.phone || "",
+        vehicleNumber: order.deliveryPerson.vehicleNumber || ""
+      });
+    } else {
+      setDeliveryPerson({ name: "", phone: "", vehicleNumber: "" });
+    }
+    setShowDeliveryModal(true);
+  };
+
+  const handleAssignDelivery = async () => {
+    if (!deliveryOrder) return;
+    
+    if (!deliveryPerson.name.trim() || !deliveryPerson.phone.trim()) {
+      alert('Vui lòng nhập tên và số điện thoại người giao hàng!');
+      return;
+    }
+
+    // Validate số điện thoại
+    const phoneRegex = /^[0-9]{10,11}$/;
+    if (!phoneRegex.test(deliveryPerson.phone.trim())) {
+      alert('Số điện thoại không hợp lệ! Vui lòng nhập 10-11 chữ số.');
+      return;
+    }
+
+    try {
+      setProcessingOrderId(deliveryOrder._id);
+      
+      console.log('[ASSIGN] Assigning delivery person:', deliveryPerson);
+      console.log('[ASSIGN] Order ID:', deliveryOrder._id);
+      console.log('[ASSIGN] Order status:', deliveryOrder.status);
+      
+      // Nếu đơn đang ở trạng thái shipping, cập nhật thông tin tài xế
+      if (deliveryOrder.status === 'shipping') {
+        // Gọi updateOrderStatus với thông tin tài xế
+        const result = await orderService.updateOrderStatus(deliveryOrder._id, 'shipping', {
+          driverName: deliveryPerson.name,
+          driverPhone: deliveryPerson.phone,
+          vehicleNumber: deliveryPerson.vehicleNumber
+        });
+        
+        console.log('[ASSIGN] API Response:', result);
+        alert('Đã cập nhật thông tin tài xế thành công!');
+      } else {
+        // Nếu đơn chưa ở trạng thái shipping, chuyển sang shipping và thêm thông tin
+        const result = await orderService.updateOrderStatus(deliveryOrder._id, 'shipping', {
+          driverName: deliveryPerson.name,
+          driverPhone: deliveryPerson.phone,
+          vehicleNumber: deliveryPerson.vehicleNumber
+        });
+        
+        console.log('[ASSIGN] API Response:', result);
+        alert('Đã phân công người giao hàng và chuyển đơn sang trạng thái "Đang giao" thành công!');
+      }
+      
+      setShowDeliveryModal(false);
+      setDeliveryPerson({ name: "", phone: "", vehicleNumber: "" });
+      setDeliveryOrder(null);
+      setHideDetailModal(false);
+      setSelectedOrder(null); // Đóng luôn modal detail
+      loadOrders();
+    } catch (error: any) {
+      console.error('Error assigning delivery person:', error);
+      alert(error?.response?.data?.message || 'Có lỗi xảy ra!');
+    } finally {
+      setProcessingOrderId(null);
+    }
+  };
+
+  // Helper: đóng modal chi tiết
+  const closeDetailModal = () => {
+    setSelectedOrder(null);
+  };
+
+  // Helper: đóng modal giao hàng
+  const closeDeliveryModal = () => {
+    setShowDeliveryModal(false);
+    setDeliveryPerson({ name: "", phone: "", vehicleNumber: "" });
+    setDeliveryOrder(null);
+    setHideDetailModal(false);
+  };
+
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
       order._id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -211,7 +326,7 @@ export function OrderManagement() {
               ) : (
                 filteredOrders.map((order) => (
                   <tr key={order._id} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-4 font-medium">#{order._id.slice(-8)}</td>
+                    <td className="py-3 px-4 font-medium">{order.formattedOrderNumber || `#${String(order.orderNumber || 0).padStart(4, '0')}` || `#${order._id.slice(-8)}`}</td>
                     <td className="py-3 px-4">
                       <div>
                         <div className="font-medium">{order.user.name}</div>
@@ -282,19 +397,36 @@ export function OrderManagement() {
                           </>
                         )}
                         {order.status !== 'pending' && order.status !== 'cancelled' && (
-                          <Select
-                            value={order.status}
-                            onValueChange={(value: string) => handleUpdateStatus(order._id, value)}
-                          >
-                            <SelectTrigger className="w-[140px] h-8">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="processing">Đang xử lý</SelectItem>
-                              <SelectItem value="shipping">Đang giao</SelectItem>
-                              <SelectItem value="delivered">Đã giao</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="flex gap-2 items-center">
+                            <Select
+                              value={order.status}
+                              onValueChange={(value: string) => handleUpdateStatus(order._id, value)}
+                            >
+                              <SelectTrigger className="w-[140px] h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="processing">Đang xử lý</SelectItem>
+                                <SelectItem value="shipping">Đang giao</SelectItem>
+                                <SelectItem value="delivered">Đã giao</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {/* Button nhập thông tin tài xế - Chỉ hiện khi đơn đang giao */}
+                            {order.status === 'shipping' && (
+                              <Button
+                                size="sm"
+                                variant={order.deliveryPerson || order.shippingDetails ? "outline" : "default"}
+                                className={order.deliveryPerson || order.shippingDetails 
+                                  ? "text-blue-600 border-blue-300 hover:bg-blue-50" 
+                                  : "bg-blue-600 hover:bg-blue-700 text-white"
+                                }
+                                onClick={() => handleOpenDeliveryModal(order)}
+                              >
+                                <Package className="w-4 h-4 mr-1" />
+                                {order.deliveryPerson || order.shippingDetails ? 'Cập nhật' : 'Nhập tài xế'}
+                              </Button>
+                            )}
+                          </div>
                         )}
                       </div>
                     </td>
@@ -307,17 +439,22 @@ export function OrderManagement() {
       </Card>
 
       {/* Order Detail Modal */}
-      {selectedOrder && (
+      {selectedOrder && !hideDetailModal && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedOrder(null)}
+          onClick={(e) => {
+            // Chỉ đóng nếu click đúng overlay (không phải bên trong content)
+            if (e.target === e.currentTarget) {
+              closeDetailModal();
+            }
+          }}
         >
           <div
             className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6 border-b">
-              <h3 className="text-2xl font-bold">Chi tiết đơn hàng #{selectedOrder._id.slice(-8)}</h3>
+              <h3 className="text-2xl font-bold">Chi tiết đơn hàng {selectedOrder.formattedOrderNumber || `#${String(selectedOrder.orderNumber || 0).padStart(4, '0')}` || `#${selectedOrder._id.slice(-8)}`}</h3>
             </div>
             <div className="p-6 space-y-6">
               {/* Customer Info */}
@@ -372,6 +509,11 @@ export function OrderManagement() {
                         {item.variantAttributes && Object.keys(item.variantAttributes).length > 0 && (
                           <p className="text-xs text-gray-600 mt-1">
                             📦 Phân loại: {Object.entries(item.variantAttributes).map(([key, value]) => value).join(', ')}
+                          </p>
+                        )}
+                        {item.sku && !item.variantAttributes && (
+                          <p className="text-xs text-gray-600 mt-1">
+                            📦 SKU: {item.sku}
                           </p>
                         )}
                         <p className="text-sm text-gray-500">
@@ -437,27 +579,78 @@ export function OrderManagement() {
                     </p>
                   </div>
                 ) : (
-                  <Select 
-                    defaultValue={selectedOrder.status}
-                    onValueChange={(value: string) => {
-                      handleUpdateStatus(selectedOrder._id, value);
-                      setSelectedOrder(null);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="processing">Đang xử lý</SelectItem>
-                      <SelectItem value="shipping">Đang giao</SelectItem>
-                      <SelectItem value="delivered">Đã giao</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-3">
+                    <Select 
+                      defaultValue={selectedOrder.status}
+                      onValueChange={(value: string) => {
+                        handleUpdateStatus(selectedOrder._id, value);
+                        setSelectedOrder(null);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="processing">Đang xử lý</SelectItem>
+                        <SelectItem value="shipping">Đang giao</SelectItem>
+                        <SelectItem value="delivered">Đã giao</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    {/* Button nhập thông tin tài xế - Hiện khi đơn đang giao */}
+                    {selectedOrder.status === 'shipping' && (
+                      <Button
+                        className={selectedOrder.deliveryPerson || selectedOrder.shippingDetails 
+                          ? "w-full bg-blue-50 text-blue-600 border border-blue-300 hover:bg-blue-100" 
+                          : "w-full bg-blue-600 hover:bg-blue-700 text-white"
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('[DEBUG] Button clicked');
+                          console.log('[DEBUG] selectedOrder:', selectedOrder);
+                          
+                          // Pre-fill form nếu đã có thông tin
+                          const currentOrder = selectedOrder;
+                          if (currentOrder.shippingDetails) {
+                            setDeliveryPerson({
+                              name: currentOrder.shippingDetails.driverName || "",
+                              phone: currentOrder.shippingDetails.driverPhone || "",
+                              vehicleNumber: currentOrder.shippingDetails.vehicleNumber || ""
+                            });
+                          } else if (currentOrder.deliveryPerson) {
+                            setDeliveryPerson({
+                              name: currentOrder.deliveryPerson.name || "",
+                              phone: currentOrder.deliveryPerson.phone || "",
+                              vehicleNumber: currentOrder.deliveryPerson.vehicleNumber || ""
+                            });
+                          } else {
+                            setDeliveryPerson({ name: "", phone: "", vehicleNumber: "" });
+                          }
+                          
+                          // Set order và mở modal
+                          setDeliveryOrder(currentOrder);
+                          setHideDetailModal(true);
+                          
+                          // Dùng setTimeout để đảm bảo state đã được set
+                          setTimeout(() => {
+                            setShowDeliveryModal(true);
+                            console.log('[DEBUG] Modal should open now');
+                          }, 0);
+                        }}
+                      >
+                        <Package className="w-4 h-4 mr-2" />
+                        {selectedOrder.deliveryPerson || selectedOrder.shippingDetails 
+                          ? 'Cập nhật thông tin tài xế' 
+                          : 'Nhập thông tin tài xế'
+                        }
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
             <div className="p-6 border-t flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setSelectedOrder(null)}>
+              <Button variant="outline" onClick={closeDetailModal}>
                 Đóng
               </Button>
             </div>
@@ -513,6 +706,105 @@ export function OrderManagement() {
                 onClick={submitRejectOrder}
               >
                 Xác nhận từ chối
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delivery Person Assignment Modal */}
+      {(() => {
+        console.log('[MODAL CHECK] showDeliveryModal:', showDeliveryModal);
+        console.log('[MODAL CHECK] deliveryOrder:', deliveryOrder);
+        console.log('[MODAL CHECK] Should render:', showDeliveryModal && deliveryOrder);
+        return null;
+      })()}
+      {showDeliveryModal && deliveryOrder && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              console.log('[MODAL] Overlay clicked (delivery)');
+              closeDeliveryModal();
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-lg max-w-md w-full shadow-2xl"
+            style={{ position: 'relative', zIndex: 10000 }}
+            onClick={(e) => {
+              console.log('[MODAL] Content clicked');
+              e.stopPropagation();
+            }}
+          >
+            <div className="p-6 border-b">
+              <h3 className="text-xl font-bold text-blue-600 flex items-center gap-2">
+                <Package className="w-6 h-6" />
+                Thông tin giao hàng
+              </h3>
+              <p className="text-sm text-gray-600 mt-2">
+                Đơn hàng {deliveryOrder.formattedOrderNumber || `#${String(deliveryOrder.orderNumber || 0).padStart(4, '0')}` || `#${deliveryOrder._id.slice(-8)}`}
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tên tài xế <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="text"
+                  value={deliveryPerson.name}
+                  onChange={(e) => setDeliveryPerson({ ...deliveryPerson, name: e.target.value })}
+                  placeholder="Nhập tên tài xế..."
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Số điện thoại tài xế <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="tel"
+                  value={deliveryPerson.phone}
+                  onChange={(e) => setDeliveryPerson({ ...deliveryPerson, phone: e.target.value })}
+                  placeholder="Nhập số điện thoại..."
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Biển số xe (tùy chọn)
+                </label>
+                <Input
+                  type="text"
+                  value={deliveryPerson.vehicleNumber}
+                  onChange={(e) => setDeliveryPerson({ ...deliveryPerson, vehicleNumber: e.target.value })}
+                  placeholder="Nhập biển số xe..."
+                  className="w-full"
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t flex gap-3 justify-end">
+              <Button
+                variant="outline"
+                onClick={closeDeliveryModal}
+              >
+                Hủy
+              </Button>
+              <Button
+                onClick={handleAssignDelivery}
+                disabled={!deliveryPerson.name.trim() || !deliveryPerson.phone.trim() || processingOrderId === deliveryOrder?._id}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {processingOrderId === deliveryOrder?._id ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Đang xử lý...
+                  </>
+                ) : (
+                  'Xác nhận giao hàng'
+                )}
               </Button>
             </div>
           </div>

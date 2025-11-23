@@ -74,6 +74,7 @@ export function ProductDetailPage({ product: initialProduct, user, onPageChange,
   const [isLoadingProduct, setIsLoadingProduct] = useState(false);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const reviewsRef = useRef<HTMLDivElement>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [totalReviews, setTotalReviews] = useState(0);
   const [isLoadingReviews, setIsLoadingReviews] = useState(false);
@@ -306,10 +307,13 @@ export function ProductDetailPage({ product: initialProduct, user, onPageChange,
         selectedVariant: {
           attributes: selectedAttributes,
           price: selectedVariant.price,
-          sku: selectedVariant.sku
+          sku: selectedVariant.sku,
+          stock: selectedVariant.stock,
+          image: selectedVariant.image
         }
       })
     };
+    console.log('Adding to cart:', productToAdd);
     onAddToCart(productToAdd);
   };
 
@@ -454,7 +458,12 @@ export function ProductDetailPage({ product: initialProduct, user, onPageChange,
               )}
               {selectedVariant && (
                 <p className="text-xs sm:text-sm text-gray-600 mt-2">
-                  SKU: {selectedVariant.sku || 'N/A'} | Còn lại: {selectedVariant.stock} sản phẩm
+                  SKU: {selectedVariant.sku || 'N/A'} | 
+                  {selectedVariant.stock <= 0 ? (
+                    <span className="text-red-600 font-semibold"> Hết hàng</span>
+                  ) : (
+                    <> Còn lại: {selectedVariant.stock} sản phẩm</>
+                  )}
                 </p>
               )}
             </div>
@@ -474,7 +483,7 @@ export function ProductDetailPage({ product: initialProduct, user, onPageChange,
                             variant.attributes[key] === testAttributes[key]
                           )
                         );
-                        const isOutOfStock = matchingVariant && matchingVariant.stock === 0;
+                        const isOutOfStock = matchingVariant && matchingVariant.stock <= 0;
                         const isDisabled = !matchingVariant || isOutOfStock;
 
                         return (
@@ -539,9 +548,13 @@ export function ProductDetailPage({ product: initialProduct, user, onPageChange,
               <Button
                 ref={buttonRef}
                 onClick={handleAddToCart}
-                disabled={product.status === 'out_of_stock' || product.status === 'inactive'}
+                disabled={
+                  product.status === 'out_of_stock' || 
+                  product.status === 'inactive' ||
+                  (selectedVariant && selectedVariant.stock <= 0)
+                }
                 className={`w-full flex items-center justify-center space-x-2 text-sm sm:text-base py-5 sm:py-6 shadow-lg transition-all ${
-                  product.status === 'out_of_stock' || product.status === 'inactive'
+                  product.status === 'out_of_stock' || product.status === 'inactive' || (selectedVariant && selectedVariant.stock <= 0)
                     ? 'bg-gray-300 hover:bg-gray-300 cursor-not-allowed text-black font-bold border-2 border-gray-400'
                     : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl'
                 }`}
@@ -549,13 +562,13 @@ export function ProductDetailPage({ product: initialProduct, user, onPageChange,
               >
                 <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
                 <span className="font-bold text-base">
-                  {product.status === 'out_of_stock' || product.status === 'inactive' 
+                  {product.status === 'out_of_stock' || product.status === 'inactive' || (selectedVariant && selectedVariant.stock <= 0)
                     ? 'TẠM HẾT HÀNG' 
-                    : 'Thêm vào giỏ hàng'}
+                    : 'THÊM VÀO GIỎ'}
                 </span>
               </Button>
               
-              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <FavoriteButton
                   productId={(product._id || product.id || '') as string}
                   isFavorited={isFavorited}
@@ -569,6 +582,15 @@ export function ProductDetailPage({ product: initialProduct, user, onPageChange,
                 >
                   <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span>Chia sẻ</span>
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="flex items-center justify-center space-x-2 text-sm sm:text-base bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 border-0"
+                  onClick={() => {
+                    reviewsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                >
+                  <span>Đánh giá</span>
                 </Button>
               </div>
               
@@ -621,7 +643,7 @@ export function ProductDetailPage({ product: initialProduct, user, onPageChange,
               <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
                 <TabsTrigger value="description" className="text-xs sm:text-sm py-2 sm:py-3">Mô tả</TabsTrigger>
                 <TabsTrigger value="specifications" className="text-xs sm:text-sm py-2 sm:py-3">Thông số</TabsTrigger>
-                <TabsTrigger value="reviews" className="text-xs sm:text-sm py-2 sm:py-3">Đánh giá ({totalReviews})</TabsTrigger>
+                <TabsTrigger value="reviews" className="text-xs sm:text-sm py-2 sm:py-3" ref={reviewsRef}>Đánh giá ({totalReviews})</TabsTrigger>
                 <TabsTrigger value="comments" className="text-xs sm:text-sm py-2 sm:py-3">Bình luận ({socialStats.commentCount})</TabsTrigger>
               </TabsList>
               

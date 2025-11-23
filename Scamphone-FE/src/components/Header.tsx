@@ -136,7 +136,7 @@ export function Header({
 
         {/* Navigation */}
         <nav className="mt-4">
-          <div className="flex items-center space-x-8">
+          <div className="flex items-center space-x-6">
             <Button
               variant={currentPage === 'home' ? 'default' : 'ghost'}
               onClick={() => onPageChange('home')}
@@ -145,59 +145,27 @@ export function Header({
               Trang chủ
             </Button>
             
-            <Button 
-              variant="ghost"
-              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-              className="flex items-center space-x-1"
-            >
-              <Grid3X3 className="w-4 h-4" />
-              <span>Danh mục sản phẩm</span>
-              <ChevronDown className="w-4 h-4" />
-            </Button>
+            {/* Category Dropdown trực tiếp trong nav */}
+            <div className="relative">
+              <Button 
+                variant="ghost"
+                onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                className="flex items-center space-x-1"
+              >
+                <Grid3X3 className="w-4 h-4" />
+                <span>Danh mục sản phẩm</span>
+                <ChevronDown className="w-4 h-4" />
+              </Button>
+            </div>
             
             <Button 
               variant="ghost"
-              onClick={() => onCategorySelect('phone')}
+              onClick={() => onPageChange('promotions')}
+              className="text-red-600 font-semibold hover:text-red-700"
             >
-              Điện thoại
+              🎁 Khuyến mãi
             </Button>
-            <Button 
-              variant="ghost"
-              onClick={() => onCategorySelect('laptop')}
-            >
-              Laptop
-            </Button>
-            <Button 
-              variant="ghost"
-              onClick={() => onCategorySelect('tablet')}
-            >
-              Tablet
-            </Button>
-            <Button 
-              variant="ghost"
-              onClick={() => onCategorySelect('accessories')}
-            >
-              Phụ kiện
-            </Button>
-            <Button 
-              variant="ghost"
-              onClick={() => onCategorySelect('home-appliances')}
-            >
-              Đồ gia dụng
-            </Button>
-            <Button 
-              variant="ghost"
-              onClick={() => onCategorySelect('tv')}
-            >
-              TV
-            </Button>
-            <Button 
-              variant="ghost"
-              onClick={() => onCategorySelect('refrigerator')}
-            >
-              Tủ lạnh
-            </Button>
-            <Button variant="ghost">Khuyến mãi</Button>
+            
             <Button variant="ghost">Tin tức</Button>
           </div>
         </nav>

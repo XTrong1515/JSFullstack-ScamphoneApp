@@ -69,8 +69,17 @@ export const orderService = {
     return data;
   },
 
-  async updateOrderStatus(id: string, status: Order['status']) {
-    const { data } = await api.put<Order>(`/orders/${id}/status`, { status });
+  async updateOrderStatus(id: string, status: Order['status'], driverInfo?: { driverName: string; driverPhone: string; vehicleNumber?: string }) {
+    const payload: any = { status };
+    
+    // Nếu có thông tin tài xế, thêm vào payload
+    if (driverInfo) {
+      payload.driverName = driverInfo.driverName;
+      payload.driverPhone = driverInfo.driverPhone;
+      payload.vehicleNumber = driverInfo.vehicleNumber;
+    }
+    
+    const { data } = await api.put<Order>(`/orders/${id}/status`, payload);
     return data;
   },
 
@@ -86,6 +95,11 @@ export const orderService = {
 
   async cancelOrder(id: string, reason?: string) {
     const { data } = await api.put<Order>(`/orders/${id}/cancel`, { reason });
+    return data;
+  },
+
+  async assignDeliveryPerson(id: string, deliveryPerson: { name: string; phone: string; vehicleNumber?: string }) {
+    const { data } = await api.put<Order>(`/orders/${id}/assign-delivery`, deliveryPerson);
     return data;
   }
 };

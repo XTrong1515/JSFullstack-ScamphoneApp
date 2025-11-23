@@ -26,7 +26,7 @@ const productSchema = new mongoose.Schema({
     attributes: { type: Map, of: String }, // { "Màu sắc": "Đen", "Dung lượng": "256GB" }
     price: { type: Number }, // Giá riêng của variant
     originalPrice: { type: Number }, // Giá gốc của variant
-    stock: { type: Number, default: 0 }, // Số lượng riêng
+    stock: { type: Number, default: 0, min: 0 }, // Số lượng riêng - không cho phép âm
     sku: { type: String }, // Mã SKU duy nhất
     image: { type: String } // Ảnh riêng của variant (optional)
   }],

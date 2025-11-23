@@ -13,6 +13,7 @@ import { AdminDashboard } from "./components/pages/AdminDashboard";
 import { ProfilePage } from "./components/pages/ProfilePage";
 import { OrdersPage } from "./components/pages/OrdersPage";
 import { FavoritesPage } from "./components/pages/FavoritesPage";
+import { PromotionsPage } from "./components/pages/PromotionsPage";
 import { AuthModal } from "./components/AuthModal";
 import { CartDropdown } from "./components/CartDropdown";
 import { UserProfileDropdown } from "./components/UserProfileDropdown";
@@ -27,6 +28,7 @@ import { OrderSuccessPage } from "./components/pages/OrderSuccessPage";
 import { NotificationCenter } from "./components/NotificationCenter";
 import { userService } from "./services/userService";
 import { SearchResultsPage } from "./components/pages/SearchResultsPage";
+import { useCartStore } from "./stores/useCartStore";
 
 interface Product {
   id: string;
@@ -63,11 +65,15 @@ interface User {
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<string>('home');
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const cartItems = useCartStore((state) => state.cartItems);
+  const addToCart = useCartStore((state) => state.addToCart);
+  const clearCart = useCartStore((state) => state.clearCart);
   const [user, setUser] = useState<User | undefined>(undefined);
   const [selectedProduct, setSelectedProduct] = useState<Product | undefined>(undefined);
   const [selectedCategory, setSelectedCategory] = useState<{categoryId: string, subcategoryId?: string} | undefined>(undefined);
   const [resetToken, setResetToken] = useState<string>('');
+  const [resetEmail, setResetEmail] = useState<string>('');
+  const [resetOtp, setResetOtp] = useState<string>('');
   const [checkoutData, setCheckoutData] = useState<any>(null);
   const [orderData, setOrderData] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -104,12 +110,10 @@ export default function App() {
           };
           setUser(userObj);
           
+          // Cart is automatically loaded by Zustand persist middleware
           // Load cart for this user
           const userCartKey = `cart_${userData._id}`;
-          const savedCart = localStorage.getItem(userCartKey);
-          if (savedCart) {
-            setCartItems(JSON.parse(savedCart));
-          }
+          // Cart loading handled by Zustand store
         } catch (error) {
           console.error('Failed to load user:', error);
           localStorage.removeItem('token');
@@ -163,42 +167,15 @@ export default function App() {
   }, [user]);
 
   // Save cart to localStorage when it changes (per user)
-  useEffect(() => {
-    if (user) {
-      const userCartKey = `cart_${user.id}`;
-      localStorage.setItem(userCartKey, JSON.stringify(cartItems));
-    }
-  }, [cartItems, user]);
+  // Cart persistence now handled by Zustand persist middleware
 
-  const handleAddToCart = (product: Product) => {
-    setCartItems(prevItems => {
-      const prodId = product.id ?? product._id;
-      const existingItem = prevItems.find(item => item.id === prodId);
-      
-      if (existingItem) {
-        return prevItems.map(item =>
-          item.id === prodId
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      } else {
-        const newItem: CartItem = {
-          id: prodId,
-          name: product.name,
-          price: product.price,
-          originalPrice: product.originalPrice,
-          image: product.image,
-          quantity: 1,
-          discount: product.discount,
-        };
-        return [...prevItems, newItem];
-      }
-    });
+  const handleAddToCart = (product: any) => {
+    // Extract variant if exists (from ProductDetailPage)
+    const variant = product.selectedVariant;
+    addToCart(product, variant);
   };
 
-  const handleUpdateCart = (items: CartItem[]) => {
-    setCartItems(items);
-  };
+  // Cart updates now handled by Zustand store
 
   const handleProductClick = (product: Product) => {
     setSelectedProduct(product);
@@ -207,14 +184,7 @@ export default function App() {
 
   const handleLogin = (userData: User) => {
     setUser(userData);
-    // Load cart for this user
-    const userCartKey = `cart_${userData.id}`;
-    const savedCart = localStorage.getItem(userCartKey);
-    if (savedCart) {
-      setCartItems(JSON.parse(savedCart));
-    } else {
-      setCartItems([]); // Clear cart if no saved cart
-    }
+    // Zustand cart store handles persistence automatically
     // Check if there's a redirect after login
     if (currentPage === 'cart') {
       setShowAuthModal(false);
@@ -223,7 +193,7 @@ export default function App() {
 
   const handleLogout = () => {
     setUser(undefined);
-    setCartItems([]); // Clear cart on logout
+    clearCart(); // Clear cart on logout using Zustand
   };
 
   const handlePageChange = (page: string, data?: any) => {
@@ -235,6 +205,10 @@ export default function App() {
         setOrderData(data);
       } else if (page === 'search') {
         setSearchQuery(data?.query || '');
+      } else if (page === 'reset-password') {
+        // Lưu email và OTP khi chuyển từ ForgotPasswordForm
+        if (data.email) setResetEmail(data.email);
+        if (data.otp) setResetOtp(data.otp);
       }
     }
   };
@@ -280,9 +254,7 @@ export default function App() {
       case 'cart':
         return (
           <CartPage
-            cartItems={cartItems}
             user={user}
-            onUpdateCart={handleUpdateCart}
             onPageChange={setCurrentPage}
           />
         );
@@ -323,15 +295,17 @@ export default function App() {
         return <OrdersPage onPageChange={setCurrentPage} />;
       case 'favorites':
         return <FavoritesPage onPageChange={setCurrentPage} onAddToCart={handleAddToCart} />;
+      case 'promotions':
+        return <PromotionsPage onPageChange={setCurrentPage} />;
       case 'test-api':
         return <TestApiPage />;
       case 'forgot-password':
         return <ForgotPasswordForm 
-          onPageChange={setCurrentPage} 
+          onPageChange={handlePageChange} 
           onTokenGenerated={setResetToken}
         />;
       case 'reset-password':
-        return <ResetPasswordPage token={resetToken} />;
+        return <ResetPasswordPage email={resetEmail} otp={resetOtp} />;
       case 'checkout':
         return <CheckoutPage onPageChange={handlePageChange} cartItems={cartItems} user={user} />;
       case 'payment':
@@ -403,8 +377,6 @@ export default function App() {
 
       {showCartDropdown && (
         <CartDropdown
-          cartItems={cartItems}
-          onUpdateCart={(items: any) => handleUpdateCart(items)}
           onClose={() => setShowCartDropdown(false)}
           onPageChange={setCurrentPage}
         />

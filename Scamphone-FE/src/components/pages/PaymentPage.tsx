@@ -16,6 +16,7 @@ import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { orderService } from "../../services/orderService";
 import { paymentService } from "../../services/paymentService";
+import { useCartStore } from "../../stores/useCartStore";
 
 interface PaymentPageProps {
   onPageChange: (page: string, data?: any) => void;
@@ -27,9 +28,13 @@ interface PaymentPageProps {
 }
 
 export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
+  const { appliedDiscount } = useCartStore();
   const [selectedMethod, setSelectedMethod] = useState<'COD' | 'VNPay'>('COD');
   const [loading, setLoading] = useState(false);
   const [showQR, setShowQR] = useState(false);
+
+  // ✅ DEBUG: Log appliedDiscount khi component render
+  console.log('[PaymentPage] Applied discount from store:', appliedDiscount);
 
   if (!checkoutData) {
     return (
@@ -99,25 +104,35 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
 
   const createOrder = async () => {
     const orderData = {
-      orderItems: cartItems.map(item => ({
-        // ensure we send a valid Mongo _id for backend stock deduction
-        product: item.id || item._id,
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        image: item.image,
-        // Include variant information if product has selected variant
-        ...(item.selectedVariant && {
-          variantAttributes: item.selectedVariant.attributes,
-          sku: item.selectedVariant.sku
-        })
-      })),
+      orderItems: cartItems.map(item => {
+        const orderItem = {
+          product: item.id || item._id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          image: item.image,
+          // Include variant information if product has selected variant
+          ...(item.selectedVariant && {
+            variantAttributes: item.selectedVariant.attributes,
+            sku: item.selectedVariant.sku
+          })
+        };
+        console.log('Cart item:', item);
+        console.log('Order item being sent:', orderItem);
+        return orderItem;
+      }),
       shippingAddress: shippingInfo,
       paymentMethod: selectedMethod,
-      totalPrice: totalPrice
+      totalPrice: totalPrice,
+      // ✅ THÊM DISCOUNT CODE
+      ...(appliedDiscount && { discountCode: appliedDiscount.code })
     };
 
+    console.log('Full order data:', orderData);
+    console.log('Applied discount from store:', appliedDiscount);
+    console.log('Discount code being sent:', orderData.discountCode);
     const order = await orderService.createOrder(orderData);
+    console.log('Order response:', order);
     return order;
   };
 

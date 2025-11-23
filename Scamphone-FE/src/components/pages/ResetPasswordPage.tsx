@@ -8,11 +8,13 @@ import { Loader2, Check } from 'lucide-react';
 import { passwordResetService } from '../../services/passwordResetService';
 
 interface ResetPasswordPageProps {
-  token?: string;
+  email?: string;
+  otp?: string;
 }
 
-export function ResetPasswordPage({ token: propToken }: ResetPasswordPageProps) {
-  const [token, setToken] = useState<string | null>(null);
+export function ResetPasswordPage({ email: propEmail, otp: propOtp }: ResetPasswordPageProps) {
+  const [email, setEmail] = useState<string>('');
+  const [otp, setOtp] = useState<string>('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -20,23 +22,28 @@ export function ResetPasswordPage({ token: propToken }: ResetPasswordPageProps) 
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Use token from props first, then try to get from URL hash
-    if (propToken) {
-      setToken(propToken);
+    // Sử dụng props nếu có, nếu không thì lấy từ URL hash
+    if (propEmail && propOtp) {
+      setEmail(propEmail);
+      setOtp(propOtp);
     } else {
-      // Lấy token từ hash URL (/#reset-password?token=...)
-      const hash = window.location.hash; // Ví dụ: #reset-password?token=abc123
+      // Lấy từ hash URL (/#reset-password?email=...&otp=...)
+      const hash = window.location.hash;
       const queryString = hash.includes('?') ? hash.split('?')[1] : '';
       const params = new URLSearchParams(queryString);
-      const tokenFromUrl = params.get('token');
-      setToken(tokenFromUrl);
+      const emailFromUrl = params.get('email');
+      const otpFromUrl = params.get('otp');
+      
+      if (emailFromUrl) setEmail(emailFromUrl);
+      if (otpFromUrl) setOtp(otpFromUrl);
     }
-  }, [propToken]);
+  }, [propEmail, propOtp]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) {
-      setError('Token không hợp lệ');
+    
+    if (!email || !otp) {
+      setError('Thông tin email hoặc OTP không hợp lệ');
       return;
     }
 
@@ -45,11 +52,16 @@ export function ResetPasswordPage({ token: propToken }: ResetPasswordPageProps) 
       return;
     }
 
+    if (newPassword.length < 6) {
+      setError('Mật khẩu phải có ít nhất 6 ký tự');
+      return;
+    }
+
     setIsLoading(true);
     setError('');
 
     try {
-      await passwordResetService.resetPassword(token, newPassword);
+      await passwordResetService.resetPassword(email, otp, newPassword);
       setSuccess(true);
       // Chuyển về trang đăng nhập sau 3 giây
       setTimeout(() => {
@@ -63,12 +75,12 @@ export function ResetPasswordPage({ token: propToken }: ResetPasswordPageProps) 
     }
   };
 
-  if (!token) {
+  if (!email || !otp) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Alert variant="destructive" className="max-w-md">
           <AlertDescription>
-            Link đặt lại mật khẩu không hợp lệ hoặc đã hết hạn
+            Thông tin reset mật khẩu không hợp lệ. Vui lòng thực hiện lại quy trình quên mật khẩu.
           </AlertDescription>
         </Alert>
       </div>
@@ -114,6 +126,34 @@ export function ResetPasswordPage({ token: propToken }: ResetPasswordPageProps) 
             </div>
 
             <div className="space-y-4">
+              {/* Email Display (readonly) */}
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-semibold text-gray-700">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  readOnly
+                  className="bg-gray-50 text-gray-600 cursor-not-allowed"
+                />
+              </div>
+
+              {/* OTP Display (readonly) */}
+              <div className="space-y-2">
+                <Label htmlFor="displayOtp" className="text-sm font-semibold text-gray-700">
+                  Mã OTP
+                </Label>
+                <Input
+                  id="displayOtp"
+                  type="text"
+                  value={otp}
+                  readOnly
+                  className="bg-gray-50 text-gray-600 cursor-not-allowed text-center tracking-widest font-mono"
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="newPassword" className="text-sm font-semibold text-gray-700">
                   Mật khẩu mới

@@ -5,6 +5,7 @@ import { Badge } from "./ui/badge";
 import { Separator } from "./ui/separator";
 import { Minus, Plus, Trash2, ShoppingBag, X } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { useCartStore } from "../stores/useCartStore";
 
 interface CartItem {
   id: string;
@@ -17,13 +18,16 @@ interface CartItem {
 }
 
 interface CartDropdownProps {
-  cartItems: CartItem[];
-  onUpdateCart: (items: CartItem[]) => void;
   onClose: () => void;
   onPageChange: (page: string) => void;
 }
 
-export function CartDropdown({ cartItems, onUpdateCart, onClose, onPageChange }: CartDropdownProps) {
+export function CartDropdown({ onClose, onPageChange }: CartDropdownProps) {
+  const { 
+    cartItems, 
+    updateQuantity: updateCartQuantity, 
+    removeItem: removeCartItem 
+  } = useCartStore();
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
@@ -36,16 +40,11 @@ export function CartDropdown({ cartItems, onUpdateCart, onClose, onPageChange }:
       removeItem(id);
       return;
     }
-    
-    const updatedItems = cartItems.map(item =>
-      item.id === id ? { ...item, quantity: newQuantity } : item
-    );
-    onUpdateCart(updatedItems);
+    updateCartQuantity(id, newQuantity);
   };
 
   const removeItem = (id: string) => {
-    const updatedItems = cartItems.filter(item => item.id !== id);
-    onUpdateCart(updatedItems);
+    removeCartItem(id);
   };
 
   const totalAmount = cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);

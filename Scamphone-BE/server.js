@@ -25,7 +25,9 @@ const app = express();
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: process.env.NODE_ENV === 'production' 
+      ? [process.env.CLIENT_URL, /\.vercel\.app$/]
+      : 'http://localhost:5173',
     methods: ['GET', 'POST'],
     credentials: true
   }
@@ -61,8 +63,38 @@ io.on('connection', (socket) => {
 // Export io for use in controllers
 export { io };
 
-// Middleware
-app.use(cors());
+// CORS Configuration
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [
+      process.env.CLIENT_URL,
+      /\.vercel\.app$/,
+      /\.onrender\.com$/
+    ]
+  : ['http://localhost:5173', 'http://localhost:5174'];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (typeof allowed === 'string') return allowed === origin;
+      if (allowed instanceof RegExp) return allowed.test(origin);
+      return false;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.log(`[CORS] Blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json()); // Cho phép server nhận dữ liệu JSON
 
 // Kết nối MongoDB
@@ -105,6 +137,16 @@ app.post('/api/v1/dev/set-password', async (req, res) => {
 app.use((req, res, next) => {
   console.log(`[REQUEST] ${req.method} ${req.path}`);
   next();
+});
+
+// Health check endpoint for Render
+app.get('/api/v1/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    message: 'ScamPhone API is running',
+    env: process.env.NODE_ENV,
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.use('/api/v1/users', userRoutes);

@@ -19,7 +19,23 @@ const shippingAddressSchema = new mongoose.Schema({
     district: { type: String }
 }, { _id: false });
 
+const deliveryPersonSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    phone: { type: String, required: true },
+    vehicleNumber: { type: String }, // Biển số xe
+    assignedAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+// Schema cho thông tin giao hàng (theo yêu cầu prompt)
+const shippingDetailsSchema = new mongoose.Schema({
+    driverName: { type: String }, // Tên tài xế
+    driverPhone: { type: String }, // SĐT tài xế
+    vehicleNumber: { type: String }, // Biển số xe (Tùy chọn)
+    shippedAt: { type: Date } // Thời điểm bắt đầu giao
+}, { _id: false });
+
 const orderSchema = new mongoose.Schema({
+    orderNumber: { type: Number, unique: true }, // Số thứ tự đơn hàng: 1, 2, 3...
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     orderItems: [orderItemSchema],
     shippingAddress: { type: shippingAddressSchema, required: true },
@@ -27,6 +43,13 @@ const orderSchema = new mongoose.Schema({
         type: String, 
         enum: ["COD", "VNPay", "Cash"],
         default: "COD"
+    },
+    // Thông tin mã giảm giá
+    discount: {
+        code: { type: String },
+        discountId: { type: mongoose.Schema.Types.ObjectId, ref: "Discount" },
+        amount: { type: Number, default: 0 },
+        type: { type: String, enum: ['percentage', 'fixed_amount', 'free_shipping'] }
     },
     totalPrice: { type: Number, required: true },
     status: {
@@ -42,7 +65,37 @@ const orderSchema = new mongoose.Schema({
     paidAt: { type: Date },
     paymentTransactionId: { type: String }, // VNPay transaction ID
     isDelivered: { type: Boolean, default: false },
-    deliveredAt: { type: Date }
+    deliveredAt: { type: Date },
+    // Thông tin người giao hàng
+    deliveryPerson: { type: deliveryPersonSchema, default: null },
+    // Thông tin chi tiết giao hàng (theo yêu cầu prompt)
+    shippingDetails: { type: shippingDetailsSchema, default: null }
 }, { timestamps: true });
+
+// Auto-increment orderNumber trước khi save
+orderSchema.pre('save', async function(next) {
+    if (this.isNew && !this.orderNumber) {
+        try {
+            // Tìm đơn hàng cuối cùng để lấy số thứ tự
+            const lastOrder = await this.constructor.findOne({}, { orderNumber: 1 })
+                .sort({ orderNumber: -1 })
+                .limit(1);
+            
+            this.orderNumber = lastOrder ? lastOrder.orderNumber + 1 : 1;
+        } catch (error) {
+            return next(error);
+        }
+    }
+    next();
+});
+
+// Virtual field để format order number thành #0001
+orderSchema.virtual('formattedOrderNumber').get(function() {
+    return `#${String(this.orderNumber).padStart(4, '0')}`;
+});
+
+// Đảm bảo virtuals được serialize khi convert to JSON
+orderSchema.set('toJSON', { virtuals: true });
+orderSchema.set('toObject', { virtuals: true });
 
 export default mongoose.model("Order", orderSchema);

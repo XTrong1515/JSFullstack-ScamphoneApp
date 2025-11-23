@@ -38,9 +38,7 @@ interface CartItem {
 }
 
 interface CartPageProps {
-  cartItems: CartItem[];
   user: any | null;
-  onUpdateCart: (items: CartItem[]) => void;
   onPageChange: (page: string) => void;
 }
 
@@ -52,8 +50,16 @@ interface ShippingAddress {
   country: string;
 }
 
-export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPageProps) {
-  const { setDiscount, removeDiscount, appliedDiscount: storedDiscount } = useCartStore();
+export function CartPage({ user, onPageChange }: CartPageProps) {
+  const { 
+    cartItems, 
+    updateQuantity: updateCartQuantity, 
+    removeItem: removeCartItem, 
+    clearCart,
+    setDiscount, 
+    removeDiscount, 
+    appliedDiscount: storedDiscount 
+  } = useCartStore();
   const [promoCode, setPromoCode] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState<any>(storedDiscount);
   const [discountAmount, setDiscountAmount] = useState(storedDiscount?.discountAmount || 0);
@@ -82,16 +88,11 @@ export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPa
       removeItem(id);
       return;
     }
-    
-    const updatedItems = cartItems.map(item =>
-      item.id === id ? { ...item, quantity: newQuantity } : item
-    );
-    onUpdateCart(updatedItems);
+    updateCartQuantity(id, newQuantity);
   };
 
   const removeItem = (id: string) => {
-    const updatedItems = cartItems.filter(item => item.id !== id);
-    onUpdateCart(updatedItems);
+    removeCartItem(id);
   };
 
   const handleApplyDiscount = async () => {
@@ -105,27 +106,39 @@ export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPa
 
     try {
       const orderValue = totalAmount;
+      console.log('[CartPage] Validating discount:', promoCode, 'for order value:', orderValue);
       const result = await adminService.validateDiscount(
         promoCode.trim(),
         orderValue,
         user?._id
       );
 
+      console.log('[CartPage] Validation result:', result);
+
       if (result.valid && result.discount) {
+        console.log('[CartPage] Setting discount to store:', result.discount);
+        
         setAppliedDiscount(result.discount);
         setDiscountAmount(result.discount.discountAmount || 0);
         setDiscountError("");
         
         // Save to Zustand store
-        setDiscount({
+        const discountData = {
           code: result.discount.code,
           name: result.discount.name,
           discountAmount: result.discount.discountAmount,
           type: result.discount.type,
           value: result.discount.value
-        });
+        };
+        console.log('[CartPage] Saving to Zustand store:', discountData);
+        setDiscount(discountData);
+        
+        // Verify it was saved
+        const currentStore = useCartStore.getState();
+        console.log('[CartPage] Store after save:', currentStore.appliedDiscount);
       }
     } catch (err: any) {
+      console.error('[CartPage] Discount validation error:', err);
       setDiscountError(err.response?.data?.message || "Mã giảm giá không hợp lệ");
       setAppliedDiscount(null);
       setDiscountAmount(0);
@@ -167,7 +180,7 @@ export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPa
       });
 
       // Clear cart after successful order
-      onUpdateCart([]);
+      clearCart();
       setShowCheckout(false);
       onPageChange('home');
     } catch (err: any) {
@@ -309,7 +322,7 @@ export function CartPage({ cartItems, user, onUpdateCart, onPageChange }: CartPa
                             type="number"
                             value={item.quantity}
                             onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
-                            className="w-12 sm:w-16 text-center text-sm h-7 sm:h-8"
+                            className="w-28 sm:w-32 text-center text-sm h-7 sm:h-8"
                             min="1"
                           />
                           <Button

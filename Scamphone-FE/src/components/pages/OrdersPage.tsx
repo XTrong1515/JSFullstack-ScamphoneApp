@@ -22,6 +22,8 @@ import { orderService } from "../../services/orderService";
 
 interface Order {
   _id: string;
+  orderNumber?: number;
+  formattedOrderNumber?: string;
   orderItems: Array<{
     product?: any;
     name: string;
@@ -37,6 +39,18 @@ interface Order {
     address: string;
     city?: string;
     district?: string;
+  };
+  deliveryPerson?: {
+    name: string;
+    phone: string;
+    vehicleNumber?: string;
+    assignedAt?: string;
+  };
+  shippingDetails?: {
+    driverName: string;
+    driverPhone: string;
+    vehicleNumber?: string;
+    shippedAt?: string;
   };
   totalPrice: number;
   status: "pending" | "processing" | "shipping" | "delivered" | "cancelled";
@@ -231,7 +245,7 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
                         <div className="flex items-center gap-2">
                           <Package className="w-5 h-5 text-gray-600" />
                           <span className="font-medium text-gray-900">
-                            Đơn hàng #{order._id.slice(-8).toUpperCase()}
+                            Đơn hàng {order.formattedOrderNumber || `#${String(order.orderNumber || 0).padStart(4, '0')}` || `#${order._id.slice(-8).toUpperCase()}`}
                           </span>
                         </div>
                         <div className="h-5 w-px bg-gray-300"></div>
@@ -310,6 +324,40 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
                             {order.shippingAddress.city && <p>{order.shippingAddress.city}</p>}
                           </div>
                         </div>
+
+                        {/* Delivery Person Info - Hiển thị khi đơn đang giao hoặc đã giao */}
+                        {/* Ưu tiên shippingDetails (theo prompt), fallback về deliveryPerson */}
+                        {(order.shippingDetails || order.deliveryPerson) && ['shipping', 'delivered'].includes(order.status) && (
+                          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                            <h4 className="font-semibold mb-3 flex items-center gap-2 text-blue-900">
+                              <Truck className="w-4 h-4" />
+                              Thông tin tài xế
+                            </h4>
+                            <div className="space-y-2 text-sm text-blue-800">
+                              <p className="flex items-center gap-2">
+                                <span className="font-medium">Tên:</span>
+                                <span>{order.shippingDetails?.driverName || order.deliveryPerson?.name}</span>
+                              </p>
+                              <p className="flex items-center gap-2">
+                                <Phone className="w-3 h-3" />
+                                <span className="font-medium">Liên hệ:</span>
+                                <a 
+                                  href={`tel:${order.shippingDetails?.driverPhone || order.deliveryPerson?.phone}`} 
+                                  className="text-blue-600 hover:underline font-semibold"
+                                >
+                                  {order.shippingDetails?.driverPhone || order.deliveryPerson?.phone}
+                                </a>
+                              </p>
+                              {(order.shippingDetails?.vehicleNumber || order.deliveryPerson?.vehicleNumber) && (
+                                <p className="flex items-center gap-2">
+                                  <Package className="w-3 h-3" />
+                                  <span className="font-medium">Biển số xe:</span>
+                                  <span>{order.shippingDetails?.vehicleNumber || order.deliveryPerson?.vehicleNumber}</span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Total */}
                         <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg border border-blue-200">
@@ -395,7 +443,7 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-2xl font-bold mb-1">Chi tiết đơn hàng</h3>
-                  <p className="text-white/80">#{selectedOrder._id.slice(-8).toUpperCase()}</p>
+                  <p className="text-white/80">{selectedOrder.formattedOrderNumber || `#${String(selectedOrder.orderNumber || 0).padStart(4, '0')}` || `#${selectedOrder._id.slice(-8).toUpperCase()}`}</p>
                 </div>
                 <Button
                   variant="outline"
@@ -451,6 +499,11 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
                             📦 Phân loại: {Object.entries(item.variantAttributes).map(([key, value]) => value).join(', ')}
                           </p>
                         )}
+                        {item.sku && !item.variantAttributes && (
+                          <p className="text-xs text-gray-600 mt-1">
+                            📦 SKU: {item.sku}
+                          </p>
+                        )}
                         <p className="text-sm text-gray-600">Số lượng: x{item.quantity}</p>
                         <p className="text-sm text-blue-600 font-medium">₫{item.price.toLocaleString()}</p>
                       </div>
@@ -459,6 +512,53 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
                   ))}
                 </div>
               </div>
+
+              {/* Delivery Person Info */}
+              {/* Ưu tiên shippingDetails (theo prompt), fallback về deliveryPerson */}
+              {(selectedOrder.shippingDetails || selectedOrder.deliveryPerson) && ['shipping', 'delivered'].includes(selectedOrder.status) && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-5 rounded-lg border border-blue-200">
+                  <h4 className="font-semibold mb-4 flex items-center gap-2 text-blue-900 text-lg">
+                    <Truck className="w-5 h-5" />
+                    Thông tin tài xế
+                  </h4>
+                  <div className="space-y-3 text-blue-900">
+                    <div className="flex items-start gap-3">
+                      <div className="bg-blue-100 p-2 rounded-full">
+                        <Package className="w-4 h-4 text-blue-700" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-blue-700">Tên</p>
+                        <p className="font-semibold">{selectedOrder.shippingDetails?.driverName || selectedOrder.deliveryPerson?.name}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="bg-blue-100 p-2 rounded-full">
+                        <Phone className="w-4 h-4 text-blue-700" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-blue-700">Liên hệ</p>
+                        <a 
+                          href={`tel:${selectedOrder.shippingDetails?.driverPhone || selectedOrder.deliveryPerson?.phone}`}
+                          className="font-semibold text-blue-600 hover:underline"
+                        >
+                          {selectedOrder.shippingDetails?.driverPhone || selectedOrder.deliveryPerson?.phone}
+                        </a>
+                      </div>
+                    </div>
+                    {(selectedOrder.shippingDetails?.vehicleNumber || selectedOrder.deliveryPerson?.vehicleNumber) && (
+                      <div className="flex items-start gap-3">
+                        <div className="bg-blue-100 p-2 rounded-full">
+                          <Truck className="w-4 h-4 text-blue-700" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-blue-700">Biển số xe</p>
+                          <p className="font-semibold">{selectedOrder.shippingDetails?.vehicleNumber || selectedOrder.deliveryPerson?.vehicleNumber}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Summary */}
               <div className="border-t pt-4">
