@@ -69,33 +69,46 @@ This project is built using the **MERN Stack** with a Monorepo architecture.
 ```bash
 git clone [https://github.com/your-username/full-stack-javascript-scamphoneapp.git](https://github.com/your-username/full-stack-javascript-scamphoneapp.git)
 cd full-stack-javascript-scamphoneapp
+```
 2. Backend Setup (Server)
 Navigate to the backend directory and install dependencies:
+```
 cd Scamphone-BE
 npm install
+```
 Create a .env file in Scamphone-BE (copy from .env.production.example):
+```
 cp .env.production.example .env
 Update your .env variables:
 PORT=5000
 MONGO_URI=mongodb://localhost:27017/scamphone
 JWT_SECRET=your_super_secret_key
+```
 # VNPAY Config (Sandbox)
 VNP_TMN_CODE=8DW7N5W5
 VNP_HASH_SECRET=Y473FV82V4439K5FP4U9MNONIVJ6PC89
 VNP_URL=[https://sandbox.vnpayment.vn/paymentv2/vpcpay.html](https://sandbox.vnpayment.vn/paymentv2/vpcpay.html)
 VNP_RETURN_URL=http://localhost:5173/payment-result
 Run the server:
+```
 npm run dev
 # Server will start at http://localhost:5000
+```
 Frontend Setup (Client)
 Open a new terminal, navigate to the frontend directory:
+```
 cd Scamphone-FE
 npm install
+```
 Create a .env file (optional if using default):
+```
 VITE_API_URL=http://localhost:5000/api/v1
+```
 Run the application:
+```
 npm run dev
 # App will run at http://localhost:5173
+```
 📂 Project Structure
 full-stack-javascript-scamphoneapp/
 ├── Scamphone-BE/           # Backend Source Code
@@ -127,3 +140,5 @@ Commit your changes (git commit -m 'Add some AmazingFeature').
 Push to the Branch (git push origin feature/AmazingFeature).
 
 Open a Pull Request.
+Developed by Xuan Trong
+Thanks All <3 Peace
