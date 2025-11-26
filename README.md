@@ -110,6 +110,7 @@ npm run dev
 # App will run at http://localhost:5173
 ```
 📂 Project Structure
+```
 full-stack-javascript-scamphoneapp/
 ├── Scamphone-BE/           # Backend Source Code
 │   ├── Controllers/        # Business Logic (Order, Product, User, Payment...)
@@ -128,6 +129,7 @@ full-stack-javascript-scamphoneapp/
     │   ├── stores/         # Global State (Zustand)
     │   └── types/          # TypeScript Interfaces
     └── vite.config.ts      # Vite Configuration
+```
 🤝 Contributing
 Contributions are always welcome! Please follow these steps:
 
