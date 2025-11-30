@@ -9,7 +9,8 @@ import {
   confirmOrder,
   rejectOrder,
   cancelOrder,
-  assignDeliveryPerson
+  assignDeliveryPerson,
+  requestRefund
 } from '../Controllers/orderController.js';
 import { protect, admin } from '../Middleware/authMiddleware.js';
 
@@ -17,6 +18,7 @@ import { protect, admin } from '../Middleware/authMiddleware.js';
 router.post('/', protect, addOrderItems);
 router.get('/myorders', protect, getMyOrders);
 router.put('/:id/cancel', protect, cancelOrder);
+router.put('/:id/refund', protect, requestRefund);
 
 // Admin routes - Đặt TRƯỚC các route có :id
 router.get('/', protect, admin, getAllOrders);

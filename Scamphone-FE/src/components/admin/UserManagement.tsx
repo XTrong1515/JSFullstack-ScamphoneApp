@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, UserPlus, Edit, Lock, Mail, Shield, Loader2 } from "lucide-react";
+import { Search, UserPlus, Edit, Lock, Unlock, Mail, Shield, Loader2, X, Save, Trash2 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
@@ -12,7 +12,7 @@ interface User {
   email: string;
   phone?: string;
   role: "admin" | "user";
-  status?: "active" | "inactive" | "blocked";
+  isLocked?: boolean;
   createdAt: string;
   lastLogin?: string;
 }
@@ -22,17 +22,20 @@ const roleConfig = {
   user: { label: "Khách hàng", color: "bg-blue-100 text-blue-700" },
 };
 
-const statusConfig = {
-  active: { label: "Hoạt động", color: "bg-green-100 text-green-700" },
-  inactive: { label: "Không hoạt động", color: "bg-gray-100 text-gray-700" },
-  blocked: { label: "Bị khóa", color: "bg-red-100 text-red-700" },
-};
-
 export function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
+  const [showForm, setShowForm] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "user" as "user" | "admin",
+  });
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -51,6 +54,79 @@ export function UserManagement() {
       console.error('Error loading users:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenForm = (user?: User) => {
+    if (user) {
+      setEditingUser(user);
+      setFormData({
+        name: user.name,
+        email: user.email,
+        password: "",
+        role: user.role,
+      });
+    } else {
+      setEditingUser(null);
+      setFormData({ name: "", email: "", password: "", role: "user" });
+    }
+    setShowForm(true);
+  };
+
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setEditingUser(null);
+    setFormData({ name: "", email: "", password: "", role: "user" });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim() || !formData.email.trim()) {
+      alert("Vui lòng nhập tên và email!");
+      return;
+    }
+
+    if (!editingUser && !formData.password.trim()) {
+      alert("Vui lòng nhập mật khẩu!");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      if (editingUser) {
+        await adminService.updateUser(editingUser._id, {
+          name: formData.name,
+          email: formData.email,
+          role: formData.role,
+        });
+        alert("Cập nhật người dùng thành công!");
+      } else {
+        await adminService.createUser(formData);
+        alert("Thêm người dùng thành công!");
+      }
+      handleCloseForm();
+      loadUsers();
+    } catch (error: any) {
+      console.error("Error saving user:", error);
+      alert(error.response?.data?.message || "Có lỗi xảy ra!");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleLock = async (user: User) => {
+    const action = user.isLocked ? "mở khóa" : "khóa";
+    if (!confirm(`Bạn có chắc chắn muốn ${action} người dùng "${user.name}"?`)) {
+      return;
+    }
+
+    try {
+      await adminService.toggleUserLock(user._id);
+      alert(`Đã ${action} người dùng thành công!`);
+      loadUsers();
+    } catch (error: any) {
+      console.error("Error toggling user lock:", error);
+      alert(error.response?.data?.message || `Không thể ${action} người dùng!`);
     }
   };
 
@@ -86,7 +162,7 @@ export function UserManagement() {
   const filteredUsers = users;
 
   const totalCustomers = users.filter((u) => u.role === "user").length;
-  const activeUsers = users.filter((u) => u.status === "active").length;
+  const lockedUsers = users.filter((u) => u.isLocked).length;
 
   if (loading) {
     return (
@@ -100,7 +176,10 @@ export function UserManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold">Quản lý người dùng</h2>
-        <Button className="bg-gradient-to-r from-blue-600 to-purple-600">
+        <Button 
+          onClick={() => handleOpenForm()}
+          className="bg-gradient-to-r from-blue-600 to-purple-600"
+        >
           <UserPlus className="w-4 h-4 mr-2" />
           Thêm người dùng
         </Button>
@@ -113,8 +192,8 @@ export function UserManagement() {
           <p className="text-3xl font-bold mt-2">{totalCustomers}</p>
         </Card>
         <Card className="p-6">
-          <p className="text-sm text-gray-600">Người dùng hoạt động</p>
-          <p className="text-3xl font-bold mt-2">{activeUsers}</p>
+          <p className="text-sm text-gray-600">Người dùng bị khóa</p>
+          <p className="text-3xl font-bold mt-2 text-red-600">{lockedUsers}</p>
         </Card>
         <Card className="p-6">
           <p className="text-sm text-gray-600">Tổng người dùng</p>
@@ -145,7 +224,7 @@ export function UserManagement() {
                 <th className="text-left py-3 px-4">Vai trò</th>
                 <th className="text-left py-3 px-4">Trạng thái</th>
                 <th className="text-left py-3 px-4">Ngày tạo</th>
-                <th className="text-left py-3 px-4">Thao tác</th>
+                <th className="text-right py-3 px-4">Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -164,35 +243,49 @@ export function UserManagement() {
                     </Badge>
                   </td>
                   <td className="py-3 px-4">
-                    <Badge className={statusConfig[user.status || 'active'].color}>
-                      {statusConfig[user.status || 'active'].label}
-                    </Badge>
+                    {user.isLocked ? (
+                      <Badge className="bg-red-100 text-red-700">
+                        <Lock className="w-3 h-3 mr-1" />
+                        Đã khóa
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-green-100 text-green-700">
+                        <Unlock className="w-3 h-3 mr-1" />
+                        Hoạt động
+                      </Badge>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-sm text-gray-500">
                     {new Date(user.createdAt).toLocaleDateString('vi-VN')}
                   </td>
                   <td className="py-3 px-4">
-                    <div className="flex gap-2">
-                      {user.role === 'user' && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          title="Thăng cấp lên Admin"
-                          onClick={() => handlePromoteToAdmin(user._id)}
-                        >
-                          <Shield className="w-4 h-4 text-purple-600" />
-                        </Button>
-                      )}
-                      <Button variant="outline" size="sm" title="Chỉnh sửa">
+                    <div className="flex gap-2 justify-end">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        title="Chỉnh sửa"
+                        onClick={() => handleOpenForm(user)}
+                        className="hover:bg-blue-50 hover:text-blue-600"
+                      >
                         <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        title={user.isLocked ? "Mở khóa" : "Khóa tài khoản"}
+                        onClick={() => handleToggleLock(user)}
+                        className={user.isLocked ? "hover:bg-green-50 hover:text-green-600" : "hover:bg-orange-50 hover:text-orange-600"}
+                      >
+                        {user.isLocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                       </Button>
                       <Button 
                         variant="outline" 
                         size="sm" 
                         title="Xóa người dùng"
                         onClick={() => handleDeleteUser(user._id)}
+                        className="hover:bg-red-50 hover:text-red-600"
                       >
-                        <Lock className="w-4 h-4 text-red-600" />
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   </td>
@@ -202,6 +295,136 @@ export function UserManagement() {
           </table>
         </div>
       </Card>
+
+      {/* Form Modal */}
+      {showForm && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={handleCloseForm}
+        >
+          <div
+            className="bg-white rounded-xl max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-xl font-bold">
+                {editingUser ? "Chỉnh sửa người dùng" : "Thêm người dùng mới"}
+              </h3>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCloseForm}
+                disabled={submitting}
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tên <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    placeholder="Nhập tên người dùng"
+                    required
+                    disabled={submitting}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    placeholder="Nhập email"
+                    required
+                    disabled={submitting}
+                    className="w-full"
+                  />
+                </div>
+
+                {!editingUser && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Mật khẩu <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) =>
+                        setFormData({ ...formData, password: e.target.value })
+                      }
+                      placeholder="Nhập mật khẩu"
+                      required
+                      disabled={submitting}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Vai trò <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.role}
+                    onChange={(e) =>
+                      setFormData({ ...formData, role: e.target.value as "user" | "admin" })
+                    }
+                    disabled={submitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="user">Khách hàng</option>
+                    <option value="admin">Quản trị viên</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCloseForm}
+                  disabled={submitting}
+                  className="flex-1"
+                >
+                  Hủy
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Đang lưu...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      {editingUser ? "Cập nhật" : "Thêm mới"}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

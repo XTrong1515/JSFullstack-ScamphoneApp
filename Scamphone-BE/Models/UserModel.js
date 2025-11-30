@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema({
     phone: { type: String },
     address: { type: String }, // Kept for backward compatibility
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    isLocked: { type: Boolean, default: false },
     loyaltyPoints: { type: Number, default: 0 },
     resetPasswordToken: String,
     resetPasswordExpires: Date,

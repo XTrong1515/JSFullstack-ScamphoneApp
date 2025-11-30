@@ -602,25 +602,31 @@ const rejectOrder = asyncHandler(async (req, res) => {
 // @desc    Allow user to cancel own order
 // @route   PUT /api/v1/orders/:id/cancel
 // @access  Private (Owner)
+// @desc    Cancel order (User/Admin)
+// @route   PUT /api/v1/orders/:id/cancel
+// @access  Private (Owner or Admin)
 const cancelOrder = asyncHandler(async (req, res) => {
   const { reason } = req.body || {};
   const order = await Order.findById(req.params.id);
 
+  // GUARD CLAUSE: Kiểm tra tồn tại đơn hàng
   if (!order) {
     res.status(404);
     throw new Error('Không tìm thấy đơn hàng');
   }
 
+  // GUARD CLAUSE: Kiểm tra quyền sở hữu
   const isOwner = order.user.toString() === req.user._id.toString();
-
   if (!isOwner && req.user.role !== 'admin') {
     res.status(403);
     throw new Error('Bạn không có quyền hủy đơn hàng này');
   }
 
-  if (!['pending', 'processing'].includes(order.status)) {
+  // GUARD CLAUSE (LOGIC NGƯỢC): Chỉ cho phép hủy khi đang ở pending hoặc processing
+  const allowedStatuses = ['pending', 'processing'];
+  if (!allowedStatuses.includes(order.status)) {
     res.status(400);
-    throw new Error('Chỉ có thể hủy đơn hàng đang chờ xử lý hoặc đang chuẩn bị');
+    throw new Error(`Không thể hủy đơn hàng ở trạng thái "${order.status}". Chỉ có thể hủy khi đơn hàng đang "Chờ xử lý" hoặc "Đang chuẩn bị".`);
   }
 
   const previousStatus = order.status;
@@ -773,6 +779,111 @@ const assignDeliveryPerson = asyncHandler(async (req, res) => {
   res.json(updatedOrder);
 });
 
+// @desc    Request refund for cancelled/paid order
+// @route   PUT /api/v1/orders/:id/refund
+// @access  Private (Owner)
+const requestRefund = asyncHandler(async (req, res) => {
+  const { bankName, accountNumber, accountName } = req.body;
+  const order = await Order.findById(req.params.id);
+
+  if (!order) {
+    res.status(404);
+    throw new Error('Không tìm thấy đơn hàng');
+  }
+
+  // Check if user owns this order
+  if (order.user.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error('Bạn không có quyền yêu cầu hoàn tiền cho đơn hàng này');
+  }
+
+  // Check if order is paid
+  if (!order.isPaid) {
+    res.status(400);
+    throw new Error('Đơn hàng chưa thanh toán, không thể yêu cầu hoàn tiền');
+  }
+
+  // Check if order is in valid status for refund
+  if (!['processing', 'cancelled'].includes(order.status)) {
+    res.status(400);
+    throw new Error('Chỉ có thể yêu cầu hoàn tiền cho đơn hàng đang xử lý hoặc đã hủy');
+  }
+
+  // Validate refund info
+  if (!bankName || !accountNumber || !accountName) {
+    res.status(400);
+    throw new Error('Vui lòng cung cấp đầy đủ thông tin tài khoản nhận hoàn tiền');
+  }
+
+  // Set refund info and update status
+  order.refundInfo = {
+    bankName,
+    accountNumber,
+    accountName,
+    requestedAt: new Date(),
+    status: 'pending'
+  };
+
+  // If order was processing, change to refund_pending and cancelled
+  if (order.status === 'processing') {
+    order.status = 'cancelled';
+    order.cancelledBy = 'user';
+    order.cancelReason = 'Khách hàng yêu cầu hủy và hoàn tiền';
+    order.cancelledAt = new Date();
+
+    // Restore stock
+    for (const item of order.orderItems) {
+      if (!item.product) continue;
+      const product = await Product.findById(item.product);
+      if (product) {
+        // Restore variant stock
+        if (item.sku || item.variantAttributes) {
+          let variantIndex = -1;
+          
+          if (item.sku) {
+            variantIndex = product.variants.findIndex(v => v.sku === item.sku);
+          } else if (item.variantAttributes) {
+            variantIndex = product.variants.findIndex(v => {
+              if (!v.attributes) return false;
+              const vAttrs = v.attributes instanceof Map ? Object.fromEntries(v.attributes) : v.attributes;
+              const itemAttrs = item.variantAttributes instanceof Map ? Object.fromEntries(item.variantAttributes) : item.variantAttributes;
+              return JSON.stringify(vAttrs) === JSON.stringify(itemAttrs);
+            });
+          }
+
+          if (variantIndex >= 0) {
+            product.variants[variantIndex].stock += item.quantity;
+            await product.save();
+            console.log(`[REFUND] Restored ${item.quantity} to variant stock:`, product.variants[variantIndex].sku);
+          }
+        } else {
+          // Restore main product stock
+          product.stock_quantity += item.quantity;
+          await product.save();
+          console.log(`[REFUND] Restored ${item.quantity} to product stock:`, product.name);
+        }
+      }
+    }
+  }
+
+  const updatedOrder = await order.save();
+
+  // Create notification for admin
+  await createNotification({
+    user: req.user._id,
+    type: 'refund_request',
+    title: 'Yêu cầu hoàn tiền',
+    message: `Đơn hàng ${updatedOrder.formattedOrderNumber || '#' + updatedOrder._id.slice(-8)} yêu cầu hoàn tiền`,
+    order: updatedOrder._id
+  });
+
+  res.json({
+    success: true,
+    message: 'Đã gửi yêu cầu hoàn tiền. Chúng tôi sẽ xử lý trong vòng 24-48 giờ.',
+    order: updatedOrder
+  });
+});
+
 export { 
   addOrderItems, 
   getOrderById, 
@@ -782,5 +893,6 @@ export {
   confirmOrder,
   rejectOrder,
   cancelOrder,
-  assignDeliveryPerson
+  assignDeliveryPerson,
+  requestRefund
 };

@@ -48,6 +48,12 @@ const authUser = asyncHandler(async (req, res) => {
   console.log('[LOGIN] User found:', !!user);
 
   if (user) {
+    // Kiểm tra tài khoản có bị khóa không
+    if (user.isLocked) {
+      res.status(403);
+      throw new Error('Tài khoản của bạn đã bị khóa');
+    }
+
     console.log('[LOGIN] User email from DB:', user.email);
     const match = await user.comparePassword(password);
     console.log('[LOGIN] Password match:', match);

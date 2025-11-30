@@ -42,8 +42,9 @@ export interface Order {
 export interface CreateOrderData {
   orderItems: OrderItem[];
   shippingAddress: ShippingAddress;
-  paymentMethod: 'COD' | 'VNPay';
+  paymentMethod: 'COD' | 'BANK_TRANSFER';
   totalPrice: number;
+  discountCode?: string;
 }
 
 export const orderService = {
@@ -100,6 +101,15 @@ export const orderService = {
 
   async assignDeliveryPerson(id: string, deliveryPerson: { name: string; phone: string; vehicleNumber?: string }) {
     const { data } = await api.put<Order>(`/orders/${id}/assign-delivery`, deliveryPerson);
+    return data;
+  },
+
+  async requestRefund(orderId: string, refundInfo: {
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+  }) {
+    const { data } = await api.put(`/orders/${orderId}/refund`, refundInfo);
     return data;
   }
 };

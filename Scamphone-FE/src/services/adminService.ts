@@ -54,6 +54,21 @@ export const adminService = {
     return data;
   },
 
+  async createUser(userData: {
+    name: string;
+    email: string;
+    password: string;
+    role?: 'user' | 'admin';
+  }) {
+    const { data } = await api.post('/admin/users', userData);
+    return data;
+  },
+
+  async toggleUserLock(userId: string) {
+    const { data } = await api.put(`/admin/users/${userId}/lock`);
+    return data;
+  },
+
   async deleteUser(userId: string) {
     await api.delete(`/admin/users/${userId}`);
   },

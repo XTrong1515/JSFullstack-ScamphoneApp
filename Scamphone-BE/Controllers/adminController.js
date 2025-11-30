@@ -5,6 +5,45 @@ import Order from '../Models/OrderModel.js';
 import slugify from 'slugify';
 
 // ------- Users -------
+// @desc    Create new user (admin)
+// @route   POST /api/v1/admin/users
+// @access  Private/Admin
+const createUser = asyncHandler(async (req, res) => {
+  const { name, email, password, role } = req.body;
+
+  if (!name || !email || !password) {
+    res.status(400);
+    throw new Error('Name, email and password are required');
+  }
+
+  const userExists = await User.findOne({ email });
+  if (userExists) {
+    res.status(400);
+    throw new Error('User already exists');
+  }
+
+  const user = await User.create({
+    name,
+    email,
+    password,
+    role: role || 'user'
+  });
+
+  if (user) {
+    res.status(201).json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isLocked: user.isLocked,
+      createdAt: user.createdAt
+    });
+  } else {
+    res.status(400);
+    throw new Error('Invalid user data');
+  }
+});
+
 // @desc    Get all users (admin)
 // @route   GET /api/v1/admin/users
 // @access  Private/Admin
@@ -100,6 +139,30 @@ const promoteToAdmin = asyncHandler(async (req, res) => {
       email: updated.email,
       role: updated.role
     }
+  });
+});
+
+// @desc    Toggle user lock status (admin)
+// @route   PUT /api/v1/admin/users/:id/lock
+// @access  Private/Admin
+const toggleUserLock = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+
+  // Đảo ngược trạng thái isLocked
+  user.isLocked = !user.isLocked;
+  const updated = await user.save();
+
+  res.json({
+    _id: updated._id,
+    name: updated.name,
+    email: updated.email,
+    role: updated.role,
+    isLocked: updated.isLocked,
+    message: updated.isLocked ? 'User has been locked' : 'User has been unlocked'
   });
 });
 
@@ -384,10 +447,12 @@ const getDashboardStats = asyncHandler(async (req, res) => {
 });
 
 export {
+  createUser,
   getUsers,
   getUserByIdAdmin,
   updateUser,
   promoteToAdmin,
+  toggleUserLock,
   deleteUser,
   getProductsAdmin,
   updateProductAdmin,

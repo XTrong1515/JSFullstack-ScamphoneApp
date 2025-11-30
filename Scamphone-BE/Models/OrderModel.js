@@ -34,6 +34,21 @@ const shippingDetailsSchema = new mongoose.Schema({
     shippedAt: { type: Date } // Thời điểm bắt đầu giao
 }, { _id: false });
 
+// Schema cho thông tin hoàn tiền
+const refundInfoSchema = new mongoose.Schema({
+    bankName: { type: String, required: true }, // Tên ngân hàng
+    accountNumber: { type: String, required: true }, // Số tài khoản
+    accountName: { type: String, required: true }, // Tên chủ tài khoản
+    requestedAt: { type: Date, default: Date.now }, // Thời điểm yêu cầu
+    processedAt: { type: Date }, // Thời điểm xử lý
+    status: { 
+        type: String, 
+        enum: ['pending', 'approved', 'rejected', 'completed'],
+        default: 'pending'
+    },
+    adminNote: { type: String } // Ghi chú từ admin
+}, { _id: false });
+
 const orderSchema = new mongoose.Schema({
     orderNumber: { type: Number, unique: true }, // Số thứ tự đơn hàng: 1, 2, 3...
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -41,7 +56,7 @@ const orderSchema = new mongoose.Schema({
     shippingAddress: { type: shippingAddressSchema, required: true },
     paymentMethod: { 
         type: String, 
-        enum: ["COD", "VNPay", "Cash"],
+        enum: ["COD", "BANK_TRANSFER", "Cash"],
         default: "COD"
     },
     // Thông tin mã giảm giá
@@ -54,7 +69,7 @@ const orderSchema = new mongoose.Schema({
     totalPrice: { type: Number, required: true },
     status: {
         type: String,
-        enum: ["pending", "processing", "shipping", "delivered", "cancelled"],
+        enum: ["pending", "processing", "shipping", "delivered", "cancelled", "refund_pending", "refunded"],
         default: "pending"
     },
     rejectionReason: { type: String },
@@ -63,7 +78,9 @@ const orderSchema = new mongoose.Schema({
     cancelledAt: { type: Date },
     isPaid: { type: Boolean, default: false },
     paidAt: { type: Date },
-    paymentTransactionId: { type: String }, // VNPay transaction ID
+    paymentTransactionId: { type: String }, // Transaction ID
+    // Thông tin hoàn tiền
+    refundInfo: { type: refundInfoSchema, default: null },
     isDelivered: { type: Boolean, default: false },
     deliveredAt: { type: Date },
     // Thông tin người giao hàng

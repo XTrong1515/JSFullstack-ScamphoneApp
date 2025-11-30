@@ -13,12 +13,19 @@ import {
   MapPin,
   Phone,
   Calendar,
-  Loader2
+  Loader2,
+  Star,
+  X,
+  Send,
+  DollarSign,
+  RefreshCw
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { ConfirmDialog } from "../ui/confirm-dialog";
 import { orderService } from "../../services/orderService";
+import { reviewService } from "../../services/reviewService";
 
 interface Order {
   _id: string;
@@ -56,6 +63,7 @@ interface Order {
   status: "pending" | "processing" | "shipping" | "delivered" | "cancelled";
   createdAt: string;
   paymentMethod?: string;
+  isPaid?: boolean;
 }
 
 const statusConfig = {
@@ -98,6 +106,18 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [reviewingOrder, setReviewingOrder] = useState<Order | null>(null);
+  const [reviewData, setReviewData] = useState<{ [productId: string]: { rating: number; comment: string } }>({});
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [refundingOrder, setRefundingOrder] = useState<Order | null>(null);
+  const [refundInfo, setRefundInfo] = useState({
+    bankName: "",
+    accountNumber: "",
+    accountName: ""
+  });
+  const [submittingRefund, setSubmittingRefund] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<string | null>(null);
 
   useEffect(() => {
     loadOrders();
@@ -116,12 +136,18 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
   };
 
   const handleCancelOrder = async (orderId: string) => {
-    const confirmed = window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này?");
-    if (!confirmed) return;
+    setOrderToCancel(orderId);
+    setShowCancelDialog(true);
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!orderToCancel) return;
 
     try {
-      setCancellingId(orderId);
-      await orderService.cancelOrder(orderId);
+      setCancellingId(orderToCancel);
+      await orderService.cancelOrder(orderToCancel);
+      setShowCancelDialog(false);
+      setOrderToCancel(null);
       await loadOrders();
       alert("Đơn hàng đã được hủy thành công");
     } catch (error: any) {
@@ -134,6 +160,97 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
 
   const handleReorder = (order: Order) => {
     alert("Tính năng đặt lại đơn hàng đang được phát triển!");
+  };
+
+  const handleOpenReviewModal = (order: Order) => {
+    setReviewingOrder(order);
+    // Initialize review data for each product
+    const initialData: { [productId: string]: { rating: number; comment: string } } = {};
+    order.orderItems.forEach((item) => {
+      const productId = item.product?._id || item.product;
+      if (productId) {
+        initialData[productId] = { rating: 5, comment: "" };
+      }
+    });
+    setReviewData(initialData);
+  };
+
+  const handleCloseReviewModal = () => {
+    setReviewingOrder(null);
+    setReviewData({});
+  };
+
+  const handleSubmitReviews = async () => {
+    if (!reviewingOrder) return;
+
+    try {
+      setSubmittingReview(true);
+      const reviewPromises = Object.entries(reviewData).map(([productId, data]) => {
+        if (data.comment.trim()) {
+          return reviewService.createReview({
+            product: productId,
+            rating: data.rating,
+            comment: data.comment,
+          });
+        }
+        return Promise.resolve();
+      });
+
+      await Promise.all(reviewPromises);
+      alert("Đã gửi đánh giá thành công!");
+      handleCloseReviewModal();
+    } catch (error: any) {
+      console.error("Error submitting reviews:", error);
+      alert(error.response?.data?.message || "Có lỗi xảy ra khi gửi đánh giá!");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const handleRatingChange = (productId: string, rating: number) => {
+    setReviewData((prev) => ({
+      ...prev,
+      [productId]: { ...prev[productId], rating },
+    }));
+  };
+
+  const handleCommentChange = (productId: string, comment: string) => {
+    setReviewData((prev) => ({
+      ...prev,
+      [productId]: { ...prev[productId], comment },
+    }));
+  };
+
+  const handleOpenRefundModal = (order: Order) => {
+    setRefundingOrder(order);
+    setRefundInfo({ bankName: "", accountNumber: "", accountName: "" });
+  };
+
+  const handleCloseRefundModal = () => {
+    setRefundingOrder(null);
+    setRefundInfo({ bankName: "", accountNumber: "", accountName: "" });
+  };
+
+  const handleSubmitRefund = async () => {
+    if (!refundingOrder) return;
+
+    if (!refundInfo.bankName || !refundInfo.accountNumber || !refundInfo.accountName) {
+      alert("Vui lòng điền đầy đủ thông tin tài khoản!");
+      return;
+    }
+
+    try {
+      setSubmittingRefund(true);
+      await orderService.requestRefund(refundingOrder._id, refundInfo);
+      alert("Đã gửi yêu cầu hoàn tiền! Chúng tôi sẽ xử lý trong 24-48 giờ.");
+      handleCloseRefundModal();
+      loadOrders(); // Reload orders to see updated status
+    } catch (error: any) {
+      console.error("Error requesting refund:", error);
+      alert(error.response?.data?.message || "Có lỗi xảy ra khi yêu cầu hoàn tiền!");
+    } finally {
+      setSubmittingRefund(false);
+    }
   };
 
   const filteredOrders = orders.filter((order) => {
@@ -389,7 +506,8 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
                             <Eye className="w-4 h-4 mr-2" />
                             Xem chi tiết
                           </Button>
-                          {["pending", "processing"].includes(order.status) && (
+                          {/* Hủy đơn hàng: Chỉ hiển thị khi pending HOẶC processing (chưa thanh toán) */}
+                          {(["pending", "processing"].includes(order.status) && !order.isPaid) && (
                             <Button
                               variant="outline"
                               className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -398,6 +516,17 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
                             >
                               <XCircle className="w-4 h-4 mr-2" />
                               {cancellingId === order._id ? "Đang hủy..." : "Hủy đơn hàng"}
+                            </Button>
+                          )}
+                          {/* Yêu cầu hoàn tiền: Chỉ hiển thị khi processing VÀ đã thanh toán */}
+                          {order.status === "processing" && order.isPaid && (
+                            <Button
+                              variant="outline"
+                              className="w-full text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                              onClick={() => handleOpenRefundModal(order)}
+                            >
+                              <RefreshCw className="w-4 h-4 mr-2" />
+                              Hủy đơn & Hoàn tiền
                             </Button>
                           )}
                           {order.status === "delivered" && (
@@ -412,6 +541,7 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
                               </Button>
                               <Button
                                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white"
+                                onClick={() => handleOpenReviewModal(order)}
                               >
                                 <MessageSquare className="w-4 h-4 mr-2" />
                                 Đánh giá
@@ -579,6 +709,283 @@ export function OrdersPage({ onPageChange }: { onPageChange: (page: string) => v
           </div>
         </div>
       )}
+
+      {/* Review Modal */}
+      {reviewingOrder && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={handleCloseReviewModal}
+        >
+          <div
+            className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold mb-1">Đánh giá sản phẩm</h3>
+                  <p className="text-white/80">
+                    Đơn hàng {reviewingOrder.formattedOrderNumber || `#${String(reviewingOrder.orderNumber || 0).padStart(4, '0')}` || `#${reviewingOrder._id.slice(-8).toUpperCase()}`}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCloseReviewModal}
+                  disabled={submittingReview}
+                  className="text-white border-white/30 hover:bg-white/10"
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {reviewingOrder.orderItems.map((item, index) => {
+                const productId = item.product?._id || item.product;
+                const currentReview = reviewData[productId] || { rating: 5, comment: "" };
+
+                return (
+                  <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                    <div className="flex gap-4 mb-4">
+                      {item.image && (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="w-20 h-20 object-cover rounded-lg border"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">{item.name}</p>
+                        {item.variantAttributes && Object.keys(item.variantAttributes).length > 0 && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            Phân loại: {Object.entries(item.variantAttributes).map(([key, value]) => value).join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Star Rating */}
+                    <div className="mb-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Đánh giá của bạn
+                      </label>
+                      <div className="flex gap-2">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => handleRatingChange(productId, star)}
+                            disabled={submittingReview}
+                            className="transition-transform hover:scale-110"
+                          >
+                            <Star
+                              className={`w-8 h-8 ${
+                                star <= currentReview.rating
+                                  ? "fill-yellow-400 text-yellow-400"
+                                  : "text-gray-300"
+                              }`}
+                            />
+                          </button>
+                        ))}
+                        <span className="ml-2 text-sm text-gray-600 self-center">
+                          {currentReview.rating} sao
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Comment */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Nhận xét của bạn
+                      </label>
+                      <textarea
+                        value={currentReview.comment}
+                        onChange={(e) => handleCommentChange(productId, e.target.value)}
+                        placeholder="Chia sẻ trải nghiệm của bạn về sản phẩm này..."
+                        disabled={submittingReview}
+                        rows={4}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div className="flex gap-3 pt-4 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCloseReviewModal}
+                  disabled={submittingReview}
+                  className="flex-1"
+                >
+                  Hủy
+                </Button>
+                <Button
+                  onClick={handleSubmitReviews}
+                  disabled={submittingReview}
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white"
+                >
+                  {submittingReview ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Đang gửi...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      Gửi đánh giá
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund Modal */}
+      {refundingOrder && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={handleCloseRefundModal}
+        >
+          <div
+            className="bg-white rounded-xl max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-t-xl">
+              <div>
+                <h3 className="text-xl font-bold mb-1">Yêu cầu hoàn tiền</h3>
+                <p className="text-white/80 text-sm">
+                  Đơn hàng {refundingOrder.formattedOrderNumber || `#${String(refundingOrder.orderNumber || 0).padStart(4, '0')}` || `#${refundingOrder._id.slice(-8).toUpperCase()}`}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCloseRefundModal}
+                disabled={submittingRefund}
+                className="text-white border-white/30 hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                <p className="text-sm text-orange-800">
+                  <strong>📌 Lưu ý:</strong> Vui lòng cung cấp thông tin tài khoản ngân hàng để nhận tiền hoàn. 
+                  Chúng tôi sẽ xử lý trong vòng 24-48 giờ làm việc.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tên ngân hàng <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="text"
+                    value={refundInfo.bankName}
+                    onChange={(e) => setRefundInfo({ ...refundInfo, bankName: e.target.value })}
+                    placeholder="Ví dụ: Vietcombank, Techcombank..."
+                    disabled={submittingRefund}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Số tài khoản <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="text"
+                    value={refundInfo.accountNumber}
+                    onChange={(e) => setRefundInfo({ ...refundInfo, accountNumber: e.target.value })}
+                    placeholder="Nhập số tài khoản"
+                    disabled={submittingRefund}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tên chủ tài khoản <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="text"
+                    value={refundInfo.accountName}
+                    onChange={(e) => setRefundInfo({ ...refundInfo, accountName: e.target.value })}
+                    placeholder="Nhập tên chủ tài khoản"
+                    disabled={submittingRefund}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Tên phải khớp với tên trên tài khoản ngân hàng
+                  </p>
+                </div>
+
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                    <span className="font-semibold text-blue-900">Số tiền hoàn:</span>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-600">
+                    ₫{refundingOrder.totalPrice.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCloseRefundModal}
+                  disabled={submittingRefund}
+                  className="flex-1"
+                >
+                  Hủy
+                </Button>
+                <Button
+                  onClick={handleSubmitRefund}
+                  disabled={submittingRefund}
+                  className="flex-1 bg-gradient-to-r from-orange-600 to-red-600 text-white"
+                >
+                  {submittingRefund ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Đang gửi...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Gửi yêu cầu
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Order Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showCancelDialog}
+        onClose={() => {
+          setShowCancelDialog(false);
+          setOrderToCancel(null);
+        }}
+        onConfirm={confirmCancelOrder}
+        title="Xác nhận hủy đơn hàng"
+        message="Bạn có chắc chắn muốn hủy đơn hàng này không? Hành động này không thể hoàn tác."
+        confirmText="Hủy đơn hàng"
+        cancelText="Quay lại"
+        variant="destructive"
+        loading={cancellingId === orderToCancel}
+      />
     </div>
   );
 }
