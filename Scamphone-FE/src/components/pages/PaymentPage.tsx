@@ -17,7 +17,6 @@ import {
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { orderService } from "../../services/orderService";
-import { paymentService } from "../../services/paymentService";
 import { useCartStore } from "../../stores/useCartStore";
 import { VIETQR_CONFIG } from "../../config/vietqr";
 
@@ -31,15 +30,12 @@ interface PaymentPageProps {
 }
 
 export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
-  const { appliedDiscount } = useCartStore();
+  const { appliedDiscount, clearCart } = useCartStore();
   const [selectedMethod, setSelectedMethod] = useState<'COD' | 'BANK_TRANSFER'>('COD');
   const [loading, setLoading] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [qrCodeImage, setQrCodeImage] = useState<string>('');
   const [currentOrderId, setCurrentOrderId] = useState<string>('');
-
-  // ✅ DEBUG: Log appliedDiscount khi component render
-  console.log('[PaymentPage] Applied discount from store:', appliedDiscount);
 
   if (!checkoutData) {
     return (
@@ -65,11 +61,9 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
 
   const { cartItems, shippingInfo, totalPrice } = checkoutData;
 
-  // Generate VietQR QR Code
   const generateVietQR = async (amount: number, orderInfo: string) => {
     try {
-      console.log('[VietQR] Generating QR code for amount:', amount);
-      
+      console.log('[VietQR] Generating QR code via API for amount:', amount);
       const response = await axios.post(
         VIETQR_CONFIG.endpoint,
         {
@@ -81,14 +75,10 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
           format: "text",
           template: "compact"
         },
-        {
-          headers: VIETQR_CONFIG.headers
-        }
+        { headers: VIETQR_CONFIG.headers }
       );
 
-      console.log('[VietQR] Response:', response.data);
-      
-      if (response.data && response.data.data && response.data.data.qrDataURL) {
+      if (response.data?.data?.qrDataURL) {
         const qrDataURL = response.data.data.qrDataURL;
         setQrCodeImage(qrDataURL);
         return qrDataURL;
@@ -96,12 +86,16 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
         throw new Error('Invalid response from VietQR API');
       }
     } catch (error: any) {
-      console.error('[VietQR] Error generating QR code:', error);
-      throw new Error(error.response?.data?.message || 'Không thể tạo mã QR');
+      console.error('[VietQR] API Error:', error.message, '. Falling back to static QR link.');
+      const fallbackOrderInfo = encodeURIComponent(orderInfo);
+      const fallbackAccountName = encodeURIComponent(VIETQR_CONFIG.bankAccount.accountName);
+      const fallbackUrl = `https://img.vietqr.io/image/${VIETQR_CONFIG.bankAccount.acqId}-${VIETQR_CONFIG.bankAccount.accountNo}-compact.png?amount=${amount}&addInfo=${fallbackOrderInfo}&accountName=${fallbackAccountName}`;
+      setQrCodeImage(fallbackUrl);
+      return fallbackUrl;
     }
   };
 
-  const handleDemoConfirmPayment = async () => {
+  const handleConfirmPayment = async () => {
     if (!currentOrderId) {
       alert('Không tìm thấy mã đơn hàng!');
       return;
@@ -110,14 +104,14 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
     try {
       setLoading(true);
       
-      // Update order status to processing and mark as paid
+      // Update order status to 'processing'. Backend handles stock deduction.
       await orderService.updateOrderStatus(currentOrderId, 'processing');
       
       // Clear cart and redirect to success page
+      clearCart();
       localStorage.removeItem('cart');
       localStorage.removeItem('shippingInfo');
       
-      alert('✅ Đã xác nhận thanh toán thành công (Demo mode)');
       onPageChange('order-success', { orderId: currentOrderId });
     } catch (error: any) {
       console.error('Error confirming payment:', error);
@@ -128,34 +122,23 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
   };
 
   const handlePlaceOrder = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
+      // Create order first regardless of payment method
+      const order = await createOrder();
+      setCurrentOrderId(order._id);
 
       if (selectedMethod === 'BANK_TRANSFER') {
-        // Create order first
-        const order = await createOrder();
-        setCurrentOrderId(order._id);
-        
-        // Generate QR code with order info
         const orderInfo = `THANHTOAN ${order._id.slice(-8).toUpperCase()}`;
-        
-        try {
-          await generateVietQR(totalPrice, orderInfo);
-          setShowQR(true);
-        } catch (qrError) {
-          console.error('VietQR error:', qrError);
-          alert('Không thể tạo mã QR. Vui lòng thử lại hoặc chọn phương thức khác.');
-          setLoading(false);
-        }
-      } else {
-        // COD - Create order immediately
-        await createOrder();
-        
-        // Clear cart and redirect
+        await generateVietQR(totalPrice, orderInfo);
+        setShowQR(true);
+        // User will be shown the QR code and a confirmation button
+      } else { // COD
+        // For COD, we can redirect immediately after order creation
+        clearCart();
         localStorage.removeItem('cart');
         localStorage.removeItem('shippingInfo');
-        setLoading(false);
-        onPageChange('order-success', { orderId: 'success' });
+        onPageChange('order-success', { orderId: order._id });
       }
     } catch (error: any) {
       console.error('Error placing order:', error);
@@ -166,35 +149,23 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
 
   const createOrder = async () => {
     const orderData = {
-      orderItems: cartItems.map(item => {
-        const orderItem = {
-          product: item.id || item._id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          image: item.image,
-          // Include variant information if product has selected variant
-          ...(item.selectedVariant && {
-            variantAttributes: item.selectedVariant.attributes,
-            sku: item.selectedVariant.sku
-          })
-        };
-        console.log('Cart item:', item);
-        console.log('Order item being sent:', orderItem);
-        return orderItem;
-      }),
+      orderItems: cartItems.map(item => ({
+        product: item.id || item._id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        image: item.image,
+        ...(item.selectedVariant && {
+          variantAttributes: item.selectedVariant.attributes,
+          sku: item.selectedVariant.sku
+        })
+      })),
       shippingAddress: shippingInfo,
       paymentMethod: selectedMethod,
       totalPrice: totalPrice,
-      // ✅ THÊM DISCOUNT CODE
       ...(appliedDiscount && { discountCode: appliedDiscount.code })
     };
-
-    console.log('Full order data:', orderData);
-    console.log('Applied discount from store:', appliedDiscount);
-    console.log('Discount code being sent:', orderData.discountCode);
     const order = await orderService.createOrder(orderData);
-    console.log('Order response:', order);
     return order;
   };
 
@@ -214,7 +185,6 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
             </p>
           </div>
 
-          {/* QR Code Image */}
           {qrCodeImage ? (
             <div className="bg-white border-4 border-green-600 rounded-xl p-4 mb-6">
               <img 
@@ -231,7 +201,6 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
             </div>
           )}
 
-          {/* Payment Info */}
           <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4 mb-6 text-left">
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm text-gray-600">Số tiền:</span>
@@ -257,9 +226,8 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
             </div>
           </div>
 
-          {/* Demo Confirm Button */}
           <Button
-            onClick={handleDemoConfirmPayment}
+            onClick={handleConfirmPayment}
             disabled={loading}
             className="w-full mb-3 bg-gradient-to-r from-green-600 to-blue-600 text-white h-12 text-base font-semibold"
           >
@@ -271,7 +239,7 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
             ) : (
               <>
                 <Check className="w-5 h-5 mr-2" />
-                ✅ Tôi đã chuyển khoản xong
+                ✅ Xác nhận đã chuyển khoản
               </>
             )}
           </Button>
@@ -282,18 +250,16 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
               setShowQR(false);
               setLoading(false);
               setQrCodeImage('');
-              setCurrentOrderId('');
             }}
             disabled={loading}
             className="w-full"
           >
-            Hủy thanh toán
+            Hủy và chọn phương thức khác
           </Button>
 
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-800">
-              <strong>📌 Lưu ý:</strong> Vui lòng kiểm tra kỹ thông tin chuyển khoản trước khi thực hiện. 
-              Sau khi chuyển khoản thành công, hãy nhấn nút xác nhận để hoàn tất đơn hàng.
+              <strong>📌 Lưu ý:</strong> Sau khi chuyển khoản thành công, hãy nhấn nút xác nhận để hoàn tất đơn hàng.
             </p>
           </div>
         </Card>
@@ -426,7 +392,7 @@ export function PaymentPage({ onPageChange, checkoutData }: PaymentPageProps) {
                       </p>
                       <div className="mt-2 p-2 bg-yellow-50 rounded border border-yellow-200">
                         <p className="text-xs text-yellow-800">
-                          💡 <strong>Hướng dẫn:</strong> Quét mã QR, sau khi chuyển khoản nhấn "Tôi đã chuyển khoản xong"
+                          💡 <strong>Hướng dẫn:</strong> Quét mã QR, sau khi chuyển khoản nhấn "Xác nhận đã chuyển khoản".
                         </p>
                       </div>
                     </div>
